@@ -1,0 +1,109 @@
+/* === Estilos específicos del modal Editar Torneo === */
+#modal-editar-torneo {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;                /* se inicia oculto por inline display:none; */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* Fondo oscurecido (clic cierra) */
+#modal-editar-torneo .saas-tr-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+}
+
+/* Caja del diálogo */
+#modal-editar-torneo .saas-tr-modal__dialog {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 18px 48px rgba(22,28,45,.25);
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+/* Botón cerrar (✕) */
+#modal-editar-torneo .saas-tr-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e7e9f1;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #222;                 /* visible en blanco */
+}
+
+/* Título */
+#modal-editar-torneo .saas-tr-modal__title {
+  margin: 0 0 12px 0;
+  font-weight: 700;
+}
+
+/* Grid de formulario */
+#modal-editar-torneo .saas-tr-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+#modal-editar-torneo .saas-tr-form-row { grid-column: span 1; }
+#modal-editar-torneo .saas-tr-form-row--full { grid-column: 1 / -1; }
+
+#modal-editar-torneo .saas-tr-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+#modal-editar-torneo .saas-tr-input,
+#modal-editar-torneo .saas-tr-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+/* Acciones */
+#modal-editar-torneo .saas-tr-modal__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Botones (apoyándonos en tus clases base) */
+#modal-editar-torneo .saas-tr-btn { cursor: pointer; border-radius: 8px; padding: 10px 14px; }
+
+#modal-editar-torneo .saas-tr-btn--primary {
+  background: #1e88e5;
+  color: #fff;
+  border: none;
+}
+
+#modal-editar-torneo .saas-tr-btn--light {
+  background: #f6f7fb;
+  border: 1px solid #e7e9f1;
+  color: #111;
+}
+
+/* Opcional: ocultar por clase en vez de inline si lo prefieres
+#modal-editar-torneo.is-hidden { display: none; }
+*/

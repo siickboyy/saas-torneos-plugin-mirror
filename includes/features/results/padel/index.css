@@ -1,0 +1,134 @@
+/* Antiguo assets/css/form-resultado-partido.css */
+
+/* Wrapper principal */
+.str-partido-tabla-wrap {
+    max-width: 470px;
+    margin: 32px auto 24px auto;
+    padding: 16px 18px 24px 18px;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 6px 32px rgba(36,58,94,0.07);
+    border: 1px solid #ececec;
+}
+
+.str-partido-resultado {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    font-size: 1.08em;
+    background: #fafbfc;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.str-partido-resultado th, .str-partido-resultado td {
+    padding: 10px 13px;
+    text-align: center;
+    border-bottom: 1px solid #eaeaea;
+}
+
+.str-partido-resultado th:first-child,
+.str-partido-resultado td:first-child {
+    text-align: left;
+    background: #f4f6f9;
+    font-weight: 600;
+    color: #36405a;
+    border-right: 1px solid #ececec;
+}
+
+.str-partido-resultado th {
+    background: #e7eefb;
+    color: #36405a;
+    font-weight: 500;
+}
+
+.str-partido-resultado tr:last-child td {
+    border-bottom: none;
+}
+
+.str-set-input {
+    width: 45px;
+    padding: 6px 0 6px 0;
+    font-size: 1.1em;
+    text-align: center;
+    border: 1px solid #bfc7d5;
+    border-radius: 7px;
+    background: #f7fafd;
+    transition: border-color 0.2s;
+}
+
+.str-set-input:focus {
+    outline: none;
+    border-color: #4d87ee;
+    background: #f0f7ff;
+}
+
+/* Estado ganador */
+.str-ganador {
+    color: #32b23c;
+    font-weight: 700;
+}
+
+/* Badge de resultado */
+.str-badge-confirmado {
+    background: #e6fff3;
+    color: #24b376;
+    font-weight: 600;
+    padding: 6px 18px;
+    border-radius: 18px;
+    margin-top: 12px;
+    display: inline-block;
+    font-size: 1.05em;
+}
+
+.str-msg-pendiente-validacion {
+    color: #e2ad13;
+    background: #fffbe7;
+    padding: 7px 16px;
+    border-radius: 16px;
+    font-weight: 500;
+    margin-top: 10px;
+    font-size: 1em;
+}
+
+.str-error {
+    color: #c24b4b;
+    background: #fff0f0;
+    padding: 8px 20px;
+    border-radius: 14px;
+    font-weight: 500;
+    margin-top: 14px;
+}
+
+.str-btn-confirmar-resultado {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 10px 32px;
+    border-radius: 18px;
+    font-weight: 600;
+    font-size: 1.06em;
+    cursor: pointer;
+    margin-top: 14px;
+    box-shadow: 0 3px 12px rgba(36,58,94,0.08);
+    transition: background 0.2s, box-shadow 0.2s;
+}
+.str-btn-confirmar-resultado:hover {
+    background: #1744a5;
+    box-shadow: 0 6px 24px rgba(36,58,94,0.12);
+}
+
+@media (max-width: 600px) {
+    .str-partido-tabla-wrap {
+        max-width: 98vw;
+        padding: 6vw 1vw 24px 1vw;
+    }
+    .str-partido-resultado th, .str-partido-resultado td {
+        padding: 7px 5px;
+        font-size: 0.97em;
+    }
+    .str-btn-confirmar-resultado {
+        width: 100%;
+        margin-top: 18px;
+    }
+}

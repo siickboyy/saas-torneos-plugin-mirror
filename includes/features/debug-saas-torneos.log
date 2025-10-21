@@ -1,0 +1,2 @@
+[2025-09-04 17:23:29] SIMULADOR entrada/selección G (parejas) | {"P":16,"fase":"semifinal","organizar_final":"premios_grupo","n_grupos_input":2,"n_grupos_usado":2,"modo_grupos":"fijo_cliente","tam_min_grupo":8}
+[2025-09-04 17:23:29] SIMULADOR generación completada | {"n_grupos":2,"len_sugerencias":304,"len_resultados":2374}

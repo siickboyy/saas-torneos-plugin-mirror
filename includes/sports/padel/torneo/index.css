@@ -1,0 +1,189 @@
+/* =========================================
+   TORNEO (vista principal)
+   Contenedor, tipografías, botones y tablas
+   ========================================= */
+
+/* ---- Paleta / tokens rápidos ---- */
+:root {
+  --tr-blue: #2f57eb;
+  --tr-blue-600: #2649c7;
+  --tr-bg: #ffffff;
+  --tr-text: #1b2248;
+  --tr-muted: #6b7294;
+  --tr-line: #e9edf6;
+  --tr-card: #ffffff;
+  --tr-card-shadow: 0 8px 24px rgba(22, 28, 45, 0.08);
+}
+
+/* ---- Contenedor principal de la vista ---- */
+#saas-tr-torneo {
+  box-sizing: border-box;
+  width: 100%;
+  /* Alineado al ancho de contenido del tema (Astra): */
+  max-width: 1140px;
+  margin: 0 auto 48px;
+  padding: 24px 24px 32px;
+  background: var(--tr-card);
+  border-radius: 14px;
+  box-shadow: var(--tr-card-shadow);
+  color: var(--tr-text);
+}
+
+/* Título */
+#saas-tr-torneo .saas-tr-titulo {
+  margin: 4px 0 18px;
+  font-size: 2.1rem;
+  line-height: 1.2;
+}
+
+/* Lista meta (deporte, tipo, etc.) */
+#saas-tr-torneo .saas-tr-meta {
+  margin: 0 0 18px;
+  padding-left: 20px;
+}
+#saas-tr-torneo .saas-tr-meta li {
+  margin: 6px 0;
+  color: var(--tr-text);
+}
+
+/* Descripción */
+#saas-tr-torneo .saas-tr-descripcion {
+  margin: 14px 0 10px;
+  color: var(--tr-muted);
+}
+
+/* ---- Botones reutilizables ---- */
+#saas-tr-torneo .saas-tr-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: #f3f6ff;
+  color: var(--tr-blue);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .04s ease, background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+#saas-tr-torneo .saas-tr-btn:hover {
+  background: #e9efff;
+}
+#saas-tr-torneo .saas-tr-btn:active {
+  transform: translateY(1px);
+}
+
+/* Variantes */
+#saas-tr-torneo .saas-tr-btn--primary {
+  background: var(--tr-blue);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(47, 87, 235, .26);
+}
+#saas-tr-torneo .saas-tr-btn--primary:hover { background: var(--tr-blue-600); }
+#saas-tr-torneo .saas-tr-btn--light {
+  background: #fff;
+  border-color: var(--tr-line);
+  color: var(--tr-blue);
+}
+#saas-tr-torneo .saas-tr-btn--light:hover {
+  background: #f8faff;
+  border-color: #dfe6fb;
+}
+
+/* Bloque de acciones (parejas: +añadir…) */
+#saas-tr-torneo .saas-tr-acciones {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+/* ---- “Cards” de secciones ---- */
+#saas-tr-torneo .saas-tr-bloque {
+  margin: 22px 0 28px;
+  padding: 18px 16px 6px;
+  border: 1px solid var(--tr-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(22, 28, 45, 0.03);
+}
+#saas-tr-torneo .saas-tr-bloque > h2 {
+  margin: 0 0 12px;
+  font-size: 1.5rem;
+}
+
+/* Sub-secciones dentro de “Gestión de grupos” */
+#saas-tr-torneo .saas-tr-seccion {
+  margin: 16px 0 20px;
+  padding: 14px 12px;
+  border: 2px dashed var(--tr-line);
+  border-radius: 12px;
+  background: #fbfcff;
+}
+#saas-tr-torneo .saas-tr-seccion > h3 {
+  margin: 0 0 10px;
+}
+
+/* ---- Tablas (parejas y listas varias) ---- */
+#saas-tr-torneo .saas-tr-tabla {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 3px 16px rgba(40,60,160,0.08);
+  font-family: inherit;
+}
+
+#saas-tr-torneo .saas-tr-tabla thead tr {
+  background: #e8f0fe;
+}
+
+#saas-tr-torneo .saas-tr-tabla th,
+#saas-tr-torneo .saas-tr-tabla td {
+  padding: 12px 16px;
+  text-align: left;
+}
+
+#saas-tr-torneo .saas-tr-tabla th {
+  color: #1b2248;
+  font-weight: 700;
+  font-size: 1.02rem;
+  letter-spacing: 0.01em;
+  border-bottom: 2px solid #dde5f6;
+}
+
+#saas-tr-torneo .saas-tr-tabla tbody tr:nth-child(odd) { background: #f7fafd; }
+#saas-tr-torneo .saas-tr-tabla tbody tr:nth-child(even) { background: #f3f6fb; }
+#saas-tr-torneo .saas-tr-tabla tbody td {
+  color: #293054;
+  font-size: .98rem;
+  border-bottom: 1px solid #edf2fb;
+}
+#saas-tr-torneo .saas-tr-tabla tbody tr:last-child td { border-bottom: none; }
+#saas-tr-torneo .saas-tr-tabla tbody tr:hover { background: #e1ecfc; transition: background .12s; }
+
+/* ---- Ajustes finos / utilidades ---- */
+#saas-tr-torneo .saas-tr-hint {
+  color: var(--tr-muted);
+}
+
+/* Responsive */
+@media (max-width: 920px) {
+  #saas-tr-torneo { padding: 18px 14px 24px; }
+  #saas-tr-torneo .saas-tr-bloque { padding: 14px 12px 2px; }
+  #saas-tr-torneo .saas-tr-acciones { flex-wrap: wrap; }
+  #saas-tr-torneo .saas-tr-tabla th, 
+  #saas-tr-torneo .saas-tr-tabla td { padding: 10px 12px; }
+}
+/* ===== Ajuste de espaciado del bloque Parejas vs. Gestión de grupos ===== */
+.saas-tr-bloque--parejas {
+  margin-bottom: 20px; /* corto para no meter aire antes del siguiente bloque */
+}
+
+/* La tabla no añade margen extra por debajo */
+#tabla-parejas {
+  margin-bottom: 0;
+}

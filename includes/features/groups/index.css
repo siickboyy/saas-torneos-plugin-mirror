@@ -1,0 +1,575 @@
+/* ==========================================================================
+   Torneo · Módulo de Grupos / Standings / Bracket
+   Ruta: /saas-torneos-de-raqueta/assets/css/torneo-grupos.css
+   ========================================================================== */
+
+/* ---- Utilidades de layout ---- */
+.str-grid-2col {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+}
+@media (max-width: 992px) {
+  .str-grid-2col { grid-template-columns: 1fr; }
+}
+
+/* ---- Botones genéricos del módulo (no pisa los existentes) ---- */
+.str-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #dbe6ff;
+  background: #f8fbff;
+  color: #1a2156;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow .15s, transform .06s ease-in-out, background .15s, color .15s, border-color .15s;
+  user-select: none;
+  text-decoration: none;
+}
+.str-btn:hover { box-shadow: 0 3px 10px rgba(40,65,100,0.12); }
+.str-btn:active { transform: translateY(1px); }
+
+/* Primario azul genérico */
+.str-btn-primary,
+.str-btn--primary {
+  border-color: #2152ff;
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+  color: #fff;
+}
+.str-btn-primary:hover,
+.str-btn--primary:hover {
+  box-shadow: 0 3px 12px rgba(33,82,255,0.25);
+  filter: brightness(0.97);
+}
+.str-btn-primary:active,
+.str-btn--primary:active { transform: translateY(1px); }
+
+/* Tamaño pequeño */
+.str-btn-small {
+  padding: 7px 10px;
+  font-size: .92rem;
+  border-radius: 8px;
+}
+
+/* ---- Pills & Badges ---- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: .83rem;
+  border-radius: 999px;
+  border: 1px solid #e3ecff;
+  background: #f6f9ff;
+  color: #26457c;
+}
+.pill-ok {
+  border-color: #c9f0d7;
+  background: #ecfdf5;
+  color: #0f5132;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: .78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff1d6;
+  color: #874d00;
+  border: 1px solid #ffe2ae;
+}
+
+/* ---- Cabecera del bloque de grupos ---- */
+.str-groups-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.str-groups-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  color: #4a5b8a;
+  font-size: .95rem;
+}
+.str-groups-meta b { color: #173a9c; }
+.str-groups-actions { display: flex; gap: 10px; }
+@media (max-width: 640px) {
+  .str-groups-header { flex-direction: column; align-items: flex-start; }
+  .str-groups-actions { width: 100%; }
+  .str-groups-actions .str-btn { width: 100%; justify-content: center; }
+}
+
+/* ---- Cards de grupos (grid) ---- */
+.str-grid-groups {
+  display: grid;
+  grid-template-columns: repeat( auto-fill, minmax(260px, 1fr) );
+  gap: 16px;
+}
+
+/* Reutiliza .str-card de la plantilla; afinamos variantes */
+.str-card.grupo .str-card-head .title b { color: #183C86; }
+.str-card.standings .str-card-head .title b { color: #183C86; }
+
+/* ---- Listas de participantes en grupo ---- */
+.str-list {
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px 16px 12px;
+}
+.str-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #eef3fb;
+  border-radius: 10px;
+  background: #f9fbff;
+}
+.str-row.placeholder {
+  background: #fffaf3;
+  border-color: #ffe6bf;
+}
+.str-pair-name {
+  color: #1a2156;
+  font-weight: 600;
+  font-size: .98rem;
+}
+.str-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Select “Añadir pareja libre ...” – adaptativo + ellipsis */
+.str-pair-select,
+.str-select {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #d8e4ff;
+  background: #fff;
+  font-size: .95rem;
+  color: #1a2156;
+  outline: none;
+  transition: border .15s, background .15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.str-pair-select:focus,
+.str-select:focus {
+  border-color: #2152ff;
+  background: #f5f9ff;
+}
+
+/* Fila de añadir: select flexible + botón visible */
+.str-row-add {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px dashed #e5e7eb;
+  background: #fcfcfd;
+}
+.str-row-add .str-select { flex: 1 1 auto; min-width: 0; }
+.str-row-add .str-btn { flex: 0 0 auto; }
+
+/* ---- Tabla de standings ---- */
+.str-table-wrap { width: 100%; overflow-x: auto; }
+.str-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .95rem;
+  color: #1a2156;
+}
+.str-table th,
+.str-table td {
+  border-bottom: 1px solid #eef3fb;
+  padding: 10px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.str-table thead th {
+  background: #f4f8ff;
+  color: #1b2f6b;
+  font-weight: 700;
+  font-size: .92rem;
+}
+.str-table tbody tr:hover { background: #fafcff; }
+
+/* ---- Bracket (acciones) ---- */
+#str-bracket .str-card-body p { margin-bottom: 10px; }
+#str-bracket .str-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#str-bracket .str-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .95rem;
+  color: #293d7a;
+}
+
+/* ---- Mensajería sutil ---- */
+.str-muted { color: #6b7ea5; }
+
+/* ---- Pequeñas adaptaciones responsive ---- */
+@media (max-width: 480px) {
+  .str-pair-select { min-width: 140px; }
+  .str-row { grid-template-columns: 1fr; }
+  .str-actions { justify-content: space-between; }
+  .str-table th, .str-table td { padding: 8px; }
+}
+
+/* ---- Compatibilidad con el resto de la estética ---- */
+#str-gestion-grupos .str-card-body,
+#str-standings .str-card-body,
+#str-bracket .str-card-body {
+  padding-top: 14px;
+  padding-bottom: 16px;
+}
+#str-gestion-grupos .str-card-head,
+#str-standings .str-card-head,
+#str-bracket .str-card-head {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eef3fb;
+}
+#str-gestion-grupos .title,
+#str-standings .title,
+#str-bracket .title {
+  font-weight: 700;
+  color: #1a2156;
+  font-size: 1.06rem;
+}
+
+/* ────────────────────────────────────────────────────────────
+   MODAL "Crear grupo"
+   ──────────────────────────────────────────────────────────── */
+.str-modal-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+  display: none; z-index: 9990;
+}
+.str-modal-overlay.show { display: block; }
+
+.str-modal {
+  position: fixed; inset: 0; display: none; z-index: 9991;
+  align-items: center; justify-content: center; padding: 1rem;
+  color: #0f172a;
+}
+.str-modal.show { display: flex; }
+
+.str-modal-dialog {
+  width: 100%; max-width: 520px; border-radius: 16px;
+  background: #fff; box-shadow: 0 20px 40px rgba(0,0,0,.2);
+  overflow: hidden;
+}
+
+.str-modal-head { padding: 16px 20px; border-bottom: 1px solid #eef2f7; }
+.str-modal-title { margin: 0; font-size: 18px; font-weight: 700; color: #0f172a; }
+
+.str-modal-body { padding: 16px 20px; }
+.str-field { margin-bottom: 12px; }
+.str-field label {
+  display: block; font-size: 13px; color: #64748b; margin-bottom: 6px;
+}
+
+/* Fix visibilidad inputs modal */
+.str-modal .str-field input[type="text"],
+.str-modal .str-field input[type="number"],
+.str-modal .str-field select,
+.str-modal .str-field textarea {
+  width: 100%; height: 40px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid #dbe2ea; outline: none;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  caret-color: #0f172a;
+}
+.str-modal .str-field input::placeholder,
+.str-modal .str-field textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+.str-modal .str-field input:-webkit-autofill,
+.str-modal .str-field input:-webkit-autofill:hover,
+.str-modal .str-field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  box-shadow: 0 0 0px 1000px #ffffff inset;
+}
+.str-modal .str-field input:focus,
+.str-modal .str-field select:focus,
+.str-modal .str-field textarea:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.str-modal-foot {
+  padding: 14px 20px; display: flex; gap: 10px; justify-content: flex-end;
+  border-top: 1px solid #eef2f7; background: #fafbfc;
+}
+
+/* Botones dentro del modal (coherentes con los azules) */
+.str-modal .str-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #dbe6ff;
+  background: #f8fbff;
+  color: #1a2156;
+  cursor: pointer;
+  transition: box-shadow .15s, transform .06s ease-in-out, background .15s, color .15s, border-color .15s;
+}
+.str-modal .str-btn:hover { box-shadow: 0 3px 10px rgba(40,65,100,0.12); }
+.str-modal .str-btn:active { transform: translateY(1px); }
+.str-modal .str-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.str-modal .str-btn-primary {
+  border-color: #2152ff !important;
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%) !important;
+  color: #fff !important;
+}
+.str-modal .str-btn-primary:hover {
+  box-shadow: 0 3px 12px rgba(33,82,255,0.25) !important;
+  filter: brightness(0.97);
+}
+
+/* ---- Accesibilidad botones (teclado) ---- */
+.str-btn:focus-visible,
+.str-modal .str-btn:focus-visible {
+  outline: 2px solid #2152ff;
+  outline-offset: 2px;
+}
+
+/* ---- Botón de peligro (Quitar / Eliminar) ---- */
+.str-btn-danger {
+  border-color: #ef4444;
+  background: #fff;
+  color: #b91c1c;
+}
+.str-btn-danger:hover,
+.str-btn-danger:active,
+.str-btn-danger:focus-visible {
+  border-color: #ef4444;
+  background: #ef4444;            /* rojo sólido al pasar/clicar */
+  color: #111;                    /* texto oscuro para contraste */
+  box-shadow: 0 3px 12px rgba(239,68,68,.28);
+}
+
+/* ────────────────────────────────────────────────────────────
+   MEJORAS ESPECÍFICAS SOLICITADAS
+   ──────────────────────────────────────────────────────────── */
+
+/* 1) “Distribuir parejas” y “Editar” → azules desde el inicio */
+#str-btn-distribuir,
+.str-card-actions .js-editar-grupo {
+  border-color: #2152ff;
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+  color: #fff;
+}
+#str-btn-distribuir:hover,
+.str-card-actions .js-editar-grupo:hover {
+  box-shadow: 0 3px 12px rgba(33,82,255,0.25);
+  filter: brightness(0.97);
+}
+
+/* 2) “Crear grupo” ya es azul; reforzamos por si el tema pisa */
+#str-btn-crear-grupo {
+  border-color: #2152ff !important;
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%) !important;
+  color: #fff !important;
+}
+#str-btn-crear-grupo:hover {
+  box-shadow: 0 3px 12px rgba(33,82,255,0.25) !important;
+  filter: brightness(0.97);
+}
+
+/* 3) Selector maestro: mismo tratamiento de ellipsis */
+#str-select-libres {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Confirmación inline (si se usa) */
+.str-delete-confirm {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  color: #991b1b;
+}
+.str-delete-confirm.show { display: flex; }
+
+/* =========================
+   PATCH hover/activos (grupos)
+   ========================= */
+
+/* 1) "Editar" y "Añadir" con el mismo look que "Distribuir parejas" */
+#str-btn-distribuir,
+.str-card-actions .js-editar-grupo,
+.str-row-add .str-btn {
+  border-color: #2152ff !important;
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%) !important;
+  color: #fff !important;
+}
+
+/* Hover/Focus – que no se “apague” */
+#str-btn-distribuir:hover,
+#str-btn-distribuir:focus-visible,
+.str-card-actions .js-editar-grupo:hover,
+.str-card-actions .js-editar-grupo:focus-visible,
+.str-row-add .str-btn:hover,
+.str-row-add .str-btn:focus-visible {
+  background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%) !important;
+  border-color: #2152ff !important;
+  color: #fff !important;
+  box-shadow: 0 3px 12px rgba(33,82,255,0.25);
+  filter: brightness(0.97);
+  outline: none;
+}
+
+/* 2) "Quitar": rojo MUY sólido al hover/active/focus */
+.str-btn-danger {
+  border-color: #ef4444;
+  background: #fff;
+  color: #b91c1c;
+}
+
+.str-btn-danger:hover,
+.str-btn-danger:active,
+.str-btn-danger:focus-visible {
+  background: #dc2626 !important;   /* rojo sólido más intenso */
+  border-color: #dc2626 !important;
+  color: #111 !important;           /* texto oscuro como pediste */
+  box-shadow: 0 4px 16px rgba(220, 38, 38, .35);
+}
+
+/* ───────── Grupos: 3 columnas (Pareja · Puntos · Acciones) ───────── */
+.str-list { margin: 0; padding: 0; list-style: none; }
+
+.str-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 120px; /* nombre | puntos | acciones */
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  margin: 8px 0;
+}
+
+.str-row-head {
+  background: #f5f8ff;
+  border-color: #e3e8ff;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.str-row-head .str-pair-name span,
+.str-row-head .str-points span,
+.str-row-head .str-actions span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+
+/* Columna: nombre */
+.str-pair-name {
+  min-width: 0; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap;
+}
+
+/* Columna: puntos */
+.str-points {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.str-points-input {
+  width: 100%;
+  max-width: 96px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+  text-align: center;
+  background: #f9fafb;
+  color: #374151;
+}
+.str-points-input:disabled {
+  opacity: .8;
+  cursor: not-allowed;
+}
+
+/* Columna: acciones (mantiene tu estilo de Quitar) */
+.str-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Responsivo: apilar puntos bajo el nombre en móvil */
+@media (max-width: 640px) {
+  .str-row {
+    grid-template-columns: 1fr 1fr; /* nombre | (puntos/acciones apilados) */
+    grid-template-areas:
+      "name actions"
+      "points actions";
+  }
+  .str-row .str-pair-name { grid-area: name; }
+  .str-row .str-points    { grid-area: points; justify-content: flex-start; }
+  .str-row .str-actions   { grid-area: actions; align-items: center; }
+  .str-row-head {
+    display: none; /* ocultamos la cabecera en móvil para no recargar */
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   PATCH · Rejilla de grupos ocupando todo el ancho (selector correcto)
+   ──────────────────────────────────────────────────────────── */
+
+#str-grupos-wrapper .str-grid {
+  display: grid !important;
+  /* colapsa columnas libres y estira los tracks */
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+  gap: 16px !important;
+  width: 100% !important;
+}
+
+/* En pantallas grandes, permite columnas algo más anchas */
+@media (min-width: 1200px) {
+  #str-grupos-wrapper .str-grid {
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)) !important;
+    gap: 18px !important;
+  }
+}
+
+/* En móvil, una sola columna */
+@media (max-width: 640px) {
+  #str-grupos-wrapper .str-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Asegura que las tarjetas no limiten el track */
+#str-grupos-wrapper .str-grid .str-card {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+

@@ -1,0 +1,301 @@
+/* === dashboard-cliente.css COMPLETO === */
+/* ===============================
+   TABLA COMPETICIONES PROFESIONAL
+   =============================== */
+
+.str-tabla-header-controls {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 0.3rem;
+  width: 100%;
+}
+
+.str-table-search-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: 430px;
+  margin-bottom: 1rem;
+}
+
+.str-table-search {
+  width: 100%;
+  padding: 0.65rem 1.1rem 0.65rem 2.8rem;
+  border: 1px solid #d0e2ff;
+  border-radius: 9px;
+  font-size: 1rem;
+  outline: none;
+  box-shadow: 0 1px 3px rgba(0,85,204,0.04);
+  margin-bottom: 0;
+  transition: border 0.15s;
+  z-index: 1;
+}
+.str-table-search:focus {
+  border-color: #0055cc;
+}
+@media (max-width: 800px) {
+  .str-table-search {
+    font-size: 0.96rem;
+    padding: 0.5rem 0.6rem 0.5rem 2.4rem;
+  }
+}
+
+
+/* Tabla */
+.str-tabla-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 1.2rem;
+}
+.str-tabla {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 1.01rem;
+  min-width: 620px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 3px 16px rgba(60,70,100,0.08);
+  overflow: hidden;
+}
+.str-tabla th,
+.str-tabla td {
+  padding: 0.95rem 1.2rem;
+  text-align: left;
+  border-bottom: 1px solid #e6eaf1;
+  font-weight: 600;
+  background: none;
+}
+.str-tabla th {
+  background: #f2f2f2;
+  font-size: 1.07rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  user-select: none;
+  cursor: pointer;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.str-tabla th .str-table-sort-icon {
+  margin-left: 0.4em;
+  font-size: 1em;
+  color: #0055cc;
+  display: inline-block;
+  vertical-align: middle;
+}
+.str-tabla th:last-child, .str-tabla td:last-child { text-align: center; }
+.str-tabla tbody tr {
+  transition: background 0.17s;
+}
+.str-tabla tbody tr:hover {
+  background-color: #eaf3ff;
+}
+.str-tabla tbody tr:nth-child(even) {
+  background-color: #f8fbfe;
+}
+.str-tabla-intro {
+  color: #3d455c;
+  font-size: 1.08rem;
+  margin-bottom: 1.1em;
+  margin-top: 0.4em;
+  opacity: 0.87;
+}
+
+/* Botón "Ver competición" */
+.str-dashboard-btn,
+.str-dashboard-btn.str-btn-ver {
+  background: #0055cc;
+  color: #fff !important;
+  border-radius: 7px;
+  padding: 0.45rem 1.05rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 2px 7px rgba(0,85,204,0.07);
+  transition: background 0.18s, transform 0.18s;
+  cursor: pointer;
+  text-decoration: none !important;
+  display: inline-block;
+}
+.str-dashboard-btn:hover,
+.str-dashboard-btn.str-btn-ver:hover {
+  background: #003f99;
+  color: #fff !important;
+  transform: translateY(-2px) scale(1.04);
+  text-decoration: none !important;
+}
+
+/* Responsive para la tabla */
+@media (max-width: 800px) {
+  .str-tabla-wrapper {
+    overflow-x: auto;
+  }
+  .str-tabla {
+    min-width: 520px;
+    font-size: 0.97rem;
+  }
+  .str-tabla th, .str-tabla td {
+    padding: 0.7rem 0.5rem;
+  }
+  .str-table-search {
+    font-size: 0.96rem;
+    padding: 0.5rem 0.6rem 0.5rem 2.1rem;
+  }
+  .str-table-search-wrapper {
+    max-width: 100%;
+  }
+}
+
+
+/* Botones del panel */
+.str-dashboard-btn {
+  background-color: #0055cc;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.str-dashboard-btn:hover {
+  background-color: #003f99;
+}
+
+/* Filtros o secciones generales */
+.str-dashboard-seccion {
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+  .str-tabla-competicion {
+    font-size: 0.9rem;
+  }
+}
+
+/* ==== DASHBOARD CARDS HOME ==== */
+.str-dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2rem;
+  margin-top: 2.5rem;
+}
+
+.str-dashboard-card,
+.str-dashboard-card *,
+.str-dashboard-card h3,
+.str-dashboard-card p {
+  text-decoration: none !important;
+}
+
+.str-dashboard-card {
+  background: #f5f8ff;
+  box-shadow: 0 6px 24px rgba(32, 96, 168, 0.07);
+  border-radius: 22px;
+  padding: 2.2rem 1.3rem 1.8rem 1.3rem;
+  text-align: center;
+  color: #232b36;
+  transition: box-shadow 0.2s, transform 0.2s;
+  position: relative;
+  cursor: pointer;
+  border: 1px solid #e3eeff;
+}
+
+.str-dashboard-card:hover, .str-dashboard-card:focus {
+  box-shadow: 0 10px 32px rgba(32, 96, 168, 0.15);
+  transform: translateY(-5px) scale(1.035);
+  border-color: #b2d3ff;
+}
+
+.str-dashboard-card-icon {
+  margin-bottom: 1.3rem;
+}
+.str-dashboard-card-icon svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.str-dashboard-card h3 {
+  margin: 0 0 0.6rem 0;
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: #0055cc;
+  letter-spacing: 0.01em;
+}
+
+.str-dashboard-card p {
+  margin: 0;
+  font-size: 1rem;
+  color: #49546b;
+  opacity: 0.90;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.str-dashboard-card-icon {
+  margin-bottom: 1.3rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.str-dashboard-card-icon i {
+  font-size: 2.4rem;
+  color: #0055cc;
+  background: #eaf3ff;
+  border-radius: 50%;
+  padding: 0.7rem;
+  width: 3.2rem;
+  height: 3.2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ==== DASHBOARD CARDS HOME Versión movil ==== */
+@media (max-width: 900px) {
+  .str-dashboard-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin-top: 1.2rem;
+    justify-items: center;
+    width: 100%;
+    max-width: 100%;
+  }
+  .str-dashboard-card {
+    width: 100%;
+    max-width: 210px;
+    min-width: 0;
+    padding: 1.4rem 0.5rem 1.4rem 0.5rem;
+    font-size: 1.06rem;
+    box-sizing: border-box;
+  }
+  .str-dashboard-card-icon i {
+    font-size: 2rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.6rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .str-dashboard-cards {
+    gap: 0.8rem;
+    margin-top: 1rem;
+  }
+  .str-dashboard-card {
+    max-width: 170px;
+    padding: 1.25rem 0.2rem 1.1rem 0.2rem;
+    font-size: 1rem;
+  }
+  .str-dashboard-card-icon i {
+    font-size: 1.4rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.32rem;
+  }
+}
+
