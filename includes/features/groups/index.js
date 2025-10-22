@@ -110,6 +110,33 @@
     return String(str).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
   }
 
+  // ⚠️ NUEVO HELPER: marcar error en el <select> sin usar alert()
+  function showSelectError(sel, message = "Selecciona una pareja libre.") {
+    if (!sel) return;
+    const wrap = sel.closest('.str-card-foot') || sel.parentElement;
+
+    sel.classList.add('str-field-error');
+    sel.setAttribute('aria-invalid', 'true');
+
+    let msg = wrap && wrap.querySelector('.str-inline-error');
+    if (!msg && wrap) {
+      msg = document.createElement('div');
+      msg.className = 'str-inline-error';
+      msg.textContent = message;
+      wrap.appendChild(msg);
+    } else if (msg) {
+      msg.textContent = message;
+    }
+
+    sel.focus();
+
+    setTimeout(() => {
+      if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+      sel.classList.remove('str-field-error');
+      sel.removeAttribute('aria-invalid');
+    }, 2200);
+  }
+
   // ────────────────────────────────────────────────────────────
   // Estado
   // ────────────────────────────────────────────────────────────
@@ -343,41 +370,31 @@
     const btnCrear = qs("#btn-crear-grupo");
     if (btnCrear) btnCrear.addEventListener("click", onCrearGrupo);
 
+    // ⚠️ CAMBIO: sin alert(); validación inline con showSelectError()
     qsa(".str-btn-add").forEach(btn => {
-  btn.addEventListener("click", async () => {
-    const card = btn.closest(".str-card.grupo");
-    const gid  = parseInt(card?.getAttribute("data-grupo") || "0", 10);
-    const sel  = card?.querySelector(".str-add-select");
-    const pid  = sel ? parseInt(sel.value || "0", 10) : 0;
+      btn.addEventListener("click", async () => {
+        const card = btn.closest(".str-card.grupo");
+        const gid  = parseInt(card?.getAttribute("data-grupo") || "0", 10);
+        const sel  = card?.querySelector(".str-add-select");
+        const pid  = sel ? parseInt(sel.value || "0", 10) : 0;
 
-    // ⬇️ Nuevo comportamiento
-    if (!gid || !pid) {
-      const legacyBtn = document.getElementById('btn-abrir-modal-pareja');
-      const altBtn    = document.querySelector('.js-add-pareja');
+        if (!gid || !pid) {
+          showSelectError(sel, "Selecciona una pareja libre.");
+          return;
+        }
 
-      if (legacyBtn) {
-        legacyBtn.click();
-      } else if (altBtn) {
-        altBtn.click();
-      } else {
-        alert("Selecciona una pareja libre.");
-      }
-      return;
-    }
-
-    try {
-      suppressPairsModal(5000);                 // <-- solo cuando sí hay pid
-      btn.disabled = true; btn.textContent = "Añadiendo...";
-      await asignarPareja(gid, pid);
-      await recargar();
-    } catch (e) {
-      console.error(e); alert(e.message || "No se pudo añadir.");
-    } finally {
-      btn.disabled = false; btn.textContent = "Añadir";
-    }
-  });
-});
-
+        try {
+          suppressPairsModal(5000);
+          btn.disabled = true; btn.textContent = "Añadiendo...";
+          await asignarPareja(gid, pid);
+          await recargar();
+        } catch (e) {
+          console.error(e); alert(e.message || "No se pudo añadir.");
+        } finally {
+          btn.disabled = false; btn.textContent = "Añadir";
+        }
+      });
+    });
 
     qsa(".str-btn-remove").forEach(btn => {
       btn.addEventListener("click", async () => {
