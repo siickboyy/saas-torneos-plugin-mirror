@@ -1,0 +1,181 @@
+     1	<?php
+     2	/**
+     3	 * Ruta: wp-content/plugins/saas-torneos-de-raqueta/includes/features/pairs/ajax/guardar-pareja.php
+     4	 * Endpoint: guardar pareja (multiselección)
+     5	 *
+     6	 * Frontend esperado:
+     7	 *   action: 'str_guardar_pareja_multiseleccion'  (o alias 'saas_guardar_pareja_multiseleccion')
+     8	 *   nonce:  wp_create_nonce('str_parejas_multiseleccion_nonce')  // mismo que LISTAR / BUSCAR
+     9	 *   torneo_id, jugador_1, jugador_2
+    10	 */
+    11	
+    12	defined('ABSPATH') || exit;
+    13	
+    14	/** Logger simple (usa el global si existe) */
+    15	if (!function_exists('str_pairs_log')) {
+    16	    function str_pairs_log($mensaje, $tag = 'PAIRS:GUARDAR') {
+    17	        $line = '[' . date('Y-m-d H:i:s') . "] [$tag] ";
+    18	        if (!is_string($mensaje)) $mensaje = print_r($mensaje, true);
+    19	        $line .= $mensaje . PHP_EOL;
+    20	
+    21	        if (function_exists('str_escribir_log')) {
+    22	            str_escribir_log($line, $tag);
+    23	            return;
+    24	        }
+    25	        $base = defined('STR_PLUGIN_PATH') ? STR_PLUGIN_PATH : plugin_dir_path(__FILE__);
+    26	        @file_put_contents(trailingslashit($base) . 'debug-saas-torneos.log', $line, FILE_APPEND | LOCK_EX);
+    27	    }
+    28	}
+    29	
+    30	/** Hooks AJAX (acción principal + alias legacy) */
+    31	add_action('wp_ajax_str_guardar_pareja_multiseleccion', 'str_guardar_pareja_multiseleccion');
+    32	add_action('wp_ajax_saas_guardar_pareja_multiseleccion', 'str_guardar_pareja_multiseleccion'); // alias por si el front aún manda 'saas_*'
+    33	// Nota: NO exponemos nopriv para guardar.
+    34	
+    35	/** Handler principal */
+    36	function str_guardar_pareja_multiseleccion() {
+    37	    $t0     = microtime(true);
+    38	    $req_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('req_', true);
+    39	
+    40	    // Evitar cualquier salida antes del JSON
+    41	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    42	    @ob_start();
+    43	
+    44	    // ─────────────────────────────────────────────────────────────────────
+    45	    // 1) Seguridad: aceptar el MISMO nonce que LISTAR/BUSCAR
+    46	    //    (primario) 'str_parejas_multiseleccion_nonce'
+    47	    //    (fallback temporal) 'str_nonce'
+    48	    // ─────────────────────────────────────────────────────────────────────
+    49	    $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce'])
+    50	           : (isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce']) : '');
+    51	
+    52	    $nonce_ok = false;
+    53	    if ($nonce) {
+    54	        if (wp_verify_nonce($nonce, 'str_parejas_multiseleccion_nonce')) {
+    55	            $nonce_ok = true;
+    56	        } elseif (wp_verify_nonce($nonce, 'str_nonce')) {
+    57	            // Fallback temporal por compatibilidad
+    58	            $nonce_ok = true;
+    59	        }
+    60	    }
+    61	    if (!$nonce_ok) {
+    62	        str_pairs_log("[DENY] Nonce inválido o ausente | req_id={$req_id}");
+    63	        return _str_pairs_json_error(['msg' => 'Nonce inválido.']);
+    64	    }
+    65	
+    66	    if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    67	        str_pairs_log("[DENY] Permisos insuficientes | req_id={$req_id}");
+    68	        return _str_pairs_json_error(['msg' => 'Permisos insuficientes.']);
+    69	    }
+    70	
+    71	    // ─────────────────────────────────────────────────────────────────────
+    72	    // 2) Datos
+    73	    // ─────────────────────────────────────────────────────────────────────
+    74	    $torneo_id = isset($_POST['torneo_id']) ? intval($_POST['torneo_id']) : 0;
+    75	    $jugador_1 = isset($_POST['jugador_1']) ? intval($_POST['jugador_1']) : 0;
+    76	    $jugador_2 = isset($_POST['jugador_2']) ? intval($_POST['jugador_2']) : 0;
+    77	
+    78	    str_pairs_log("[START] POST=" . print_r($_POST, true) . " | req_id={$req_id}");
+    79	
+    80	    if ($torneo_id <= 0 || $jugador_1 <= 0 || $jugador_2 <= 0) {
+    81	        str_pairs_log("[ERROR] Datos incompletos | req_id={$req_id}");
+    82	        return _str_pairs_json_error(['msg' => 'Datos incompletos.']);
+    83	    }
+    84	
+    85	    if ($jugador_1 === $jugador_2) {
+    86	        str_pairs_log("[ERROR] Jugadores idénticos | req_id={$req_id}");
+    87	        return _str_pairs_json_error(['msg' => 'Debes elegir dos jugadores distintos.']);
+    88	    }
+    89	
+    90	    // ─────────────────────────────────────────────────────────────────────
+    91	    // 3) Evitar duplicados dentro del mismo torneo
+    92	    //    (ACF guarda arrays/serializado → LIKE con comillas)
+    93	    // ─────────────────────────────────────────────────────────────────────
+    94	    $duplicada = new WP_Query([
+    95	        'post_type'      => 'pareja',
+    96	        'post_status'    => 'publish',
+    97	        'posts_per_page' => 1,
+    98	        'fields'         => 'ids',
+    99	        'meta_query'     => [
+   100	            'relation' => 'AND',
+   101	            [
+   102	                'key'     => 'torneo_asociado',
+   103	                'value'   => '"' . $torneo_id . '"',
+   104	                'compare' => 'LIKE',
+   105	            ],
+   106	            [
+   107	                'key'     => 'jugador_1',
+   108	                'value'   => '"' . $jugador_1 . '"',
+   109	                'compare' => 'LIKE',
+   110	            ],
+   111	            [
+   112	                'key'     => 'jugador_2',
+   113	                'value'   => '"' . $jugador_2 . '"',
+   114	                'compare' => 'LIKE',
+   115	            ],
+   116	        ],
+   117	    ]);
+   118	
+   119	    if ($duplicada && $duplicada->have_posts()) {
+   120	        str_pairs_log("[DENY] Duplicada detectada | torneo={$torneo_id} | j1={$jugador_1} | j2={$jugador_2} | req_id={$req_id}");
+   121	        return _str_pairs_json_error(['msg' => 'Esta pareja ya está registrada en el torneo.']);
+   122	    }
+   123	
+   124	    // ─────────────────────────────────────────────────────────────────────
+   125	    // 4) Crear post 'pareja'
+   126	    // ─────────────────────────────────────────────────────────────────────
+   127	    $nombre_1      = get_the_title($jugador_1);
+   128	    $nombre_2      = get_the_title($jugador_2);
+   129	    $titulo_pareja = trim(($nombre_1 ?: 'Jugador 1') . ' + ' . ($nombre_2 ?: 'Jugador 2'));
+   130	
+   131	    $post_id = wp_insert_post([
+   132	        'post_type'   => 'pareja',
+   133	        'post_status' => 'publish',
+   134	        'post_title'  => $titulo_pareja ?: 'Pareja',
+   135	        'post_author' => get_current_user_id(),
+   136	    ], true);
+   137	
+   138	    if (is_wp_error($post_id) || !$post_id) {
+   139	        $err = is_wp_error($post_id) ? $post_id->get_error_message() : 'ID=0';
+   140	        str_pairs_log("[ERROR] Fallo creando post pareja: {$err} | req_id={$req_id}");
+   141	        return _str_pairs_json_error(['msg' => 'No se pudo crear la pareja.']);
+   142	    }
+   143	
+   144	    // ─────────────────────────────────────────────────────────────────────
+   145	    // 5) Guardar ACF (o meta) con el MISMO esquema que LISTAR/BUSCAR
+   146	    // ─────────────────────────────────────────────────────────────────────
+   147	    if (function_exists('update_field')) {
+   148	        update_field('jugador_1',      [$jugador_1], $post_id);
+   149	        update_field('jugador_2',      [$jugador_2], $post_id);
+   150	        update_field('torneo_asociado',[$torneo_id], $post_id);
+   151	    } else {
+   152	        update_post_meta($post_id, 'jugador_1',       [$jugador_1]);
+   153	        update_post_meta($post_id, 'jugador_2',       [$jugador_2]);
+   154	        update_post_meta($post_id, 'torneo_asociado', [$torneo_id]);
+   155	    }
+   156	
+   157	    // ─────────────────────────────────────────────────────────────────────
+   158	    // 6) OK
+   159	    // ─────────────────────────────────────────────────────────────────────
+   160	    $dur = round((microtime(true) - $t0) * 1000);
+   161	    str_pairs_log("[END] OK | post_id={$post_id} | torneo={$torneo_id} | j1={$jugador_1} | j2={$jugador_2} | dur_ms={$dur} | req_id={$req_id}");
+   162	
+   163	    return _str_pairs_json_ok([
+   164	        'msg'        => 'Pareja guardada correctamente',
+   165	        'post_id'    => $post_id,
+   166	        'jugador_1'  => $jugador_1,
+   167	        'jugador_2'  => $jugador_2,
+   168	        'torneo_id'  => $torneo_id,
+   169	        'titulo'     => $titulo_pareja,
+   170	    ]);
+   171	}
+   172	
+   173	/** Helpers JSON (limpian buffers antes de responder) */
+   174	function _str_pairs_json_ok(array $payload) {
+   175	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+   176	    wp_send_json_success($payload);
+   177	}
+   178	function _str_pairs_json_error(array $payload) {
+   179	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+   180	    wp_send_json_error($payload, 400);
+   181	}

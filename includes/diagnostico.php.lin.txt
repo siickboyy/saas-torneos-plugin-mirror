@@ -1,0 +1,49 @@
+     1	<?php
+     2	/**
+     3	 * Archivo: /includes/diagnostico.php
+     4	 * Propósito: Forzar la creación del archivo de log y dejar trazas mínimas al recargar la web.
+     5	 */
+     6	if ( ! defined('ABSPATH') ) { exit; }
+     7	
+     8	// --- Utilidad local de log (fallback) si aún no existe str_escribir_log ---
+     9	if ( ! function_exists('str_escribir_log') ) {
+    10	    function str_escribir_log($mensaje, $origen = '') {
+    11	        $ruta_log  = plugin_dir_path( dirname(__FILE__) ) . 'debug-saas-torneos.log'; // raíz del plugin
+    12	        $timestamp = date('[Y-m-d H:i:s]');
+    13	        $origen    = $origen ? "[$origen]" : '';
+    14	        if (is_array($mensaje) || is_object($mensaje)) {
+    15	            $mensaje = print_r($mensaje, true);
+    16	        }
+    17	        @file_put_contents($ruta_log, "$timestamp $origen $mensaje" . PHP_EOL, FILE_APPEND | LOCK_EX);
+    18	    }
+    19	}
+    20	
+    21	// 1) Forzar creación del archivo de log e indicar que el diagnóstico cargó
+    22	str_escribir_log('Diagnóstico cargado OK', 'DIAGNOSTICO');
+    23	
+    24	// 2) Dejar una traza de “arranque de petición” (BOOT)
+    25	$uri        = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+    26	$is_admin   = function_exists('is_admin') ? (is_admin() ? 1 : 0) : 0;
+    27	$doing_ajax = (defined('DOING_AJAX') && DOING_AJAX) ? 1 : 0;
+    28	$user_id    = function_exists('get_current_user_id') ? (int) get_current_user_id() : 0;
+    29	$roles      = [];
+    30	if (function_exists('wp_get_current_user')) {
+    31	    $u = wp_get_current_user();
+    32	    $roles = is_object($u) ? (array) $u->roles : [];
+    33	}
+    34	str_escribir_log("BOOT | URI={$uri} | admin={$is_admin} | ajax={$doing_ajax} | user={$user_id} | roles=" . json_encode($roles), 'DIAGNOSTICO');
+    35	
+    36	// 3) Registrar captura de FATAL al finalizar la petición
+    37	if ( ! function_exists('str_diag_shutdown') ) {
+    38	    function str_diag_shutdown() {
+    39	        $err = error_get_last();
+    40	        if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+    41	            $uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+    42	            $msg = sprintf('FATAL: %s in %s:%d | URI=%s',
+    43	                $err['message'], $err['file'], $err['line'], $uri
+    44	            );
+    45	            str_escribir_log($msg, 'DIAGNOSTICO');
+    46	        }
+    47	    }
+    48	}
+    49	register_shutdown_function('str_diag_shutdown');

@@ -1,0 +1,151 @@
+     1	<?php
+     2	// antiguo includes/ajax/ajax-buscar-jugadores.php
+     3	
+     4	add_action('wp_ajax_str_buscar_jugadores', 'str_ajax_buscar_jugadores');
+     5	function str_ajax_buscar_jugadores() {
+     6	    // Seguridad
+     7	    check_ajax_referer('str_parejas_multiseleccion_nonce', 'nonce');
+     8	
+     9	    $torneo_id = intval($_POST['torneo_id']);
+    10	    $nombre    = sanitize_text_field($_POST['nombre'] ?? '');
+    11	    $apellido  = sanitize_text_field($_POST['apellido'] ?? '');
+    12	    $email     = sanitize_text_field($_POST['email'] ?? '');
+    13	
+    14	    // --- LOG DATOS RECIBIDOS ---
+    15	    if (function_exists('str_escribir_log')) str_escribir_log("[AJAX buscar_jugadores] INICIO", 'AJAX');
+    16	    if (function_exists('str_escribir_log')) str_escribir_log("POST: " . print_r($_POST, true), 'AJAX');
+    17	
+    18	    // 1. Construcción de la query principal de jugadores del torneo
+    19	    $args = array(
+    20	        'post_type'      => 'jugador_deportes',
+    21	        'posts_per_page' => -1,
+    22	        'post_status'    => 'publish',
+    23	        'meta_query'     => array(
+    24	            'relation' => 'AND',
+    25	            array(
+    26	                'key'     => 'torneos_asociados',
+    27	                'value'   => '"' . $torneo_id . '"',
+    28	                'compare' => 'LIKE'
+    29	            )
+    30	        ),
+    31	    );
+    32	    if ($nombre) {
+    33	        $args['meta_query'][] = array(
+    34	            'key'     => 'nombre',
+    35	            'value'   => $nombre,
+    36	            'compare' => 'LIKE'
+    37	        );
+    38	    }
+    39	    if ($apellido) {
+    40	        $args['meta_query'][] = array(
+    41	            'key'     => 'apellido',
+    42	            'value'   => $apellido,
+    43	            'compare' => 'LIKE'
+    44	        );
+    45	    }
+    46	    if ($email) {
+    47	        $args['meta_query'][] = array(
+    48	            'key'     => 'email',
+    49	            'value'   => $email,
+    50	            'compare' => 'LIKE'
+    51	        );
+    52	    }
+    53	    if (function_exists('str_escribir_log')) str_escribir_log("ARGS JUGADORES: " . print_r($args, true), 'AJAX');
+    54	
+    55	    // 2. Recopilar IDs de jugadores ya emparejados en este torneo
+    56	    $jugadores_ocupados = array();
+    57	    $parejas_args = array(
+    58	        'post_type'      => 'pareja',
+    59	        'posts_per_page' => -1,
+    60	        'post_status'    => 'publish',
+    61	        'meta_query'     => array(
+    62	            array(
+    63	                'key'     => 'torneo_asociado',
+    64	                'value'   => '"' . $torneo_id . '"',
+    65	                'compare' => 'LIKE'
+    66	            )
+    67	        ),
+    68	    );
+    69	    $parejas = get_posts($parejas_args);
+    70	
+    71	    if (function_exists('str_escribir_log')) str_escribir_log("[AJAX buscar_jugadores] Parejas encontradas: " . count($parejas), 'AJAX');
+    72	
+    73	    foreach ($parejas as $pareja) {
+    74	        $titulo_pareja = $pareja->post_title;
+    75	        $pareja_id = $pareja->ID;
+    76	
+    77	        // --- LOG valores raw ACF de la pareja
+    78	        $j1_raw = get_field('jugador_1', $pareja_id);
+    79	        $j2_raw = get_field('jugador_2', $pareja_id);
+    80	        $torneo_raw = get_field('torneo_asociado', $pareja_id);
+    81	
+    82	        if (function_exists('str_escribir_log')) {
+    83	            str_escribir_log("PAREJA: ID=$pareja_id, TITULO=$titulo_pareja", 'AJAX');
+    84	            str_escribir_log("jugador_1 (raw): " . print_r($j1_raw, true), 'AJAX');
+    85	            str_escribir_log("jugador_2 (raw): " . print_r($j2_raw, true), 'AJAX');
+    86	            str_escribir_log("torneo_asociado (raw): " . print_r($torneo_raw, true), 'AJAX');
+    87	        }
+    88	
+    89	        // Normalizar jugador_1 y jugador_2 (soportar ID simple, array de IDs, array de objetos, objeto WP_Post, array de WP_Post)
+    90	        foreach (['jugador_1' => $j1_raw, 'jugador_2' => $j2_raw] as $campo => $val) {
+    91	            if (empty($val)) continue;
+    92	            if (is_array($val)) {
+    93	                foreach ($val as $item) {
+    94	                    if (is_numeric($item)) {
+    95	                        $jugadores_ocupados[] = intval($item);
+    96	                    } elseif (is_object($item) && isset($item->ID)) {
+    97	                        $jugadores_ocupados[] = intval($item->ID);
+    98	                    } elseif (is_array($item) && isset($item['ID'])) {
+    99	                        $jugadores_ocupados[] = intval($item['ID']);
+   100	                    }
+   101	                }
+   102	            } elseif (is_numeric($val)) {
+   103	                $jugadores_ocupados[] = intval($val);
+   104	            } elseif (is_object($val) && isset($val->ID)) {
+   105	                $jugadores_ocupados[] = intval($val->ID);
+   106	            }
+   107	        }
+   108	    }
+   109	
+   110	    // Limpiar duplicados y valores vacíos
+   111	    $jugadores_ocupados = array_unique(array_filter($jugadores_ocupados));
+   112	    if (function_exists('str_escribir_log')) str_escribir_log("JUGADORES OCUPADOS FINAL (IDs): " . print_r($jugadores_ocupados, true), 'AJAX');
+   113	
+   114	    // 3. Query principal de jugadores
+   115	    $jugadores_query = new WP_Query($args);
+   116	    $jugadores = array();
+   117	
+   118	    if (function_exists('str_escribir_log')) str_escribir_log("Nº jugadores encontrados: " . $jugadores_query->found_posts, 'AJAX');
+   119	
+   120	    if ($jugadores_query->have_posts()) {
+   121	        while ($jugadores_query->have_posts()) {
+   122	            $jugadores_query->the_post();
+   123	            $id = get_the_ID();
+   124	            $nombre = get_field('nombre');
+   125	            $apellido = get_field('apellido');
+   126	            $email = get_field('email');
+   127	
+   128	            if (in_array($id, $jugadores_ocupados)) {
+   129	                if (function_exists('str_escribir_log')) {
+   130	                    str_escribir_log("EXCLUIDO por estar ocupado: $id - $nombre $apellido", 'AJAX');
+   131	                }
+   132	                continue;
+   133	            }
+   134	            $jugadores[] = array(
+   135	                'ID'      => $id,
+   136	                'nombre'  => $nombre,
+   137	                'apellido'=> $apellido,
+   138	                'email'   => $email
+   139	            );
+   140	        }
+   141	        wp_reset_postdata();
+   142	    }
+   143	
+   144	    if (function_exists('str_escribir_log')) {
+   145	        str_escribir_log("JUGADORES DISPONIBLES PARA FRONTEND: " . print_r($jugadores, true), 'AJAX');
+   146	    }
+   147	
+   148	    wp_send_json_success(array(
+   149	        'jugadores' => $jugadores
+   150	    ));
+   151	}

@@ -1,0 +1,85 @@
+     1	<?php
+     2	/**
+     3	 * Shortcode: Panel del Cliente
+     4	 * Archivo: /includes/shortcodes/panel-cliente.php
+     5	 */
+     6	
+     7	if ( ! defined( 'ABSPATH' ) ) exit; // Evitar acceso directo
+     8	
+     9	// Shortcode principal del panel del cliente
+    10	function str_shortcode_panel_cliente() {
+    11	    if ( ! is_user_logged_in() || ( ! current_user_can('cliente') && ! current_user_can('administrator') ) ) {
+    12	        return '<p>Acceso restringido. Debes iniciar sesión como cliente.</p>';
+    13	    }
+    14	
+    15	    ob_start();
+    16	
+    17	    ?>
+    18	    <div class="str-dashboard-container">
+    19	        <h2 class="str-dashboard-title">Panel del Cliente</h2>
+    20	
+    21	        <div class="str-dashboard-menu">
+    22	            <ul>
+    23	                <li><a href="<?php echo esc_url(add_query_arg('seccion', 'mis-competiciones')); ?>">Mis competiciones</a></li>
+    24	                <li><a href="<?php echo esc_url(add_query_arg('seccion', 'jugadores')); ?>">Jugadores</a></li>
+    25	                <li><a href="<?php echo esc_url(add_query_arg('seccion', 'ajustes')); ?>">Ajustes</a></li>
+    26	                <li><a href="<?php echo esc_url(add_query_arg('seccion', 'nueva-competicion')); ?>">Crear nueva competición</a></li>
+    27	            </ul>
+    28	        </div>
+    29	
+    30	        <div class="str-dashboard-content">
+    31	            <?php
+    32	            $seccion = isset($_GET['seccion']) ? sanitize_text_field($_GET['seccion']) : 'mis-competiciones';
+    33	
+    34	            switch ($seccion) {
+    35	                case 'mis-competiciones':
+    36	                    $file = STR_PLUGIN_PATH . 'templates/dashboard/mis-competiciones.php';
+    37	                    if ( file_exists($file) ) {
+    38	                        include $file;
+    39	                    } else {
+    40	                        echo '<p>No se encontró la plantilla de competiciones.</p>';
+    41	                    }
+    42	                    break;
+    43	
+    44	                case 'jugadores':
+    45	                    $file = STR_PLUGIN_PATH . 'templates/dashboard/jugadores.php';
+    46	                    if ( file_exists($file) ) {
+    47	                        include $file;
+    48	                    } else {
+    49	                        echo '<p>No se encontró la plantilla de jugadores.</p>';
+    50	                    }
+    51	                    break;
+    52	
+    53	                case 'ajustes':
+    54	                    $file = STR_PLUGIN_PATH . 'templates/dashboard/ajustes.php';
+    55	                    if ( file_exists($file) ) {
+    56	                        include $file;
+    57	                    } else {
+    58	                        echo '<p>No se encontró la plantilla de ajustes.</p>';
+    59	                    }
+    60	                    break;
+    61	
+    62	                case 'nueva-competicion':
+    63	                    $form_nueva_competicion = STR_PLUGIN_PATH . 'templates/dashboard/form-nueva-competicion.php';
+    64	                    if ( file_exists($form_nueva_competicion) ) {
+    65	                        include $form_nueva_competicion;
+    66	                    } else {
+    67	                        echo '<p>El formulario de nueva competición no está disponible.</p>';
+    68	                        if ( function_exists('str_escribir_log') ) {
+    69	                            str_escribir_log('El archivo form-nueva-competicion.php no existe. Include saltado.', 'panel-cliente.php');
+    70	                        }
+    71	                    }
+    72	                    break;
+    73	
+    74	                default:
+    75	                    echo '<p>Selecciona una opción del menú.</p>';
+    76	                    break;
+    77	            }
+    78	            ?>
+    79	        </div>
+    80	    </div>
+    81	    <?php
+    82	
+    83	    return ob_get_clean();
+    84	}
+    85	add_shortcode('panel_cliente', 'str_shortcode_panel_cliente');

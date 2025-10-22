@@ -1,0 +1,55 @@
+     1	<?php
+     2	/**
+     3	 * AJAX: Cargar modal de invitaci¨®n de jugador (players)
+     4	 * Ruta: wp-content/plugins/saas-torneos-de-raqueta/includes/features/players/ajax/cargar-modal.php
+     5	 */
+     6	if ( ! defined('ABSPATH') ) exit;
+     7	
+     8	// Logger opcional (seguro si no existe)
+     9	if ( ! function_exists('str_escribir_log') ) {
+    10	    function str_escribir_log( $m, $tag = 'PLAYERS-MODAL' ) { /* noop en prod */ }
+    11	}
+    12	
+    13	/**
+    14	 * Handler ¨²nico con alias para acciones nuevas (saas_) y legacy (str_)
+    15	 */
+    16	$__saas_players_modal_handler = function () {
+    17	    $nonce   = isset($_POST['nonce'])   ? $_POST['nonce']   : '';
+    18	    $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+    19	
+    20	    // Verificaci¨®n de nonce: debe coincidir con el que localizamos desde PHP (str_nonce)
+    21	    if ( ! wp_verify_nonce( $nonce, 'str_nonce' ) ) {
+    22	        str_escribir_log('[ERR] Nonce inv¨¢lido o ausente');
+    23	        wp_send_json_error([ 'message' => 'Nonce inv¨¢lido' ], 403);
+    24	    }
+    25	
+    26	    // Cargamos la vista del modal (feature ¡ú legacy fallback)
+    27	    ob_start();
+    28	
+    29	    $view_feature = STR_PLUGIN_PATH . 'includes/features/players/views/modal-invitacion.php';
+    30	    $view_legacy  = STR_PLUGIN_PATH . 'includes/forms/form-invitacion-jugador.php';
+    31	
+    32	    if ( file_exists($view_feature) ) {
+    33	        include $view_feature;
+    34	    } elseif ( file_exists($view_legacy) ) {
+    35	        include $view_legacy;
+    36	    } else {
+    37	        echo '<div class="saas-tr-hint">Vista de modal no encontrada.</div>';
+    38	        str_escribir_log('[ERR] No existe view ni legacy para el modal');
+    39	    }
+    40	
+    41	    $html = ob_get_clean();
+    42	
+    43	    wp_send_json_success([
+    44	        'html'    => $html,
+    45	        'post_id' => $post_id,
+    46	    ], 200);
+    47	};
+    48	
+    49	// Acciones nuevas (prefijo saas_)
+    50	add_action('wp_ajax_saas_cargar_modal_invitacion',        $__saas_players_modal_handler);
+    51	add_action('wp_ajax_nopriv_saas_cargar_modal_invitacion', $__saas_players_modal_handler);
+    52	
+    53	// Alias legacy (prefijo str_), por si algo del c¨®digo viejo los sigue usando
+    54	add_action('wp_ajax_str_cargar_modal_invitacion',         $__saas_players_modal_handler);
+    55	add_action('wp_ajax_nopriv_str_cargar_modal_invitacion',  $__saas_players_modal_handler);

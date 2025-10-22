@@ -1,0 +1,44 @@
+     1	<?php
+     2	/**
+     3	 * Registro del Custom Post Type "grupo" para la gestión de grupos en torneos.
+     4	 * Este CPT permitirá organizar las parejas/jugadores en grupos para la fase de grupos de cualquier competición.
+     5	 */
+     6	
+     7	if ( ! defined( 'ABSPATH' ) ) {
+     8	    exit; // Evita el acceso directo.
+     9	}
+    10	
+    11	function str_registrar_cpt_grupo() {
+    12	    $labels = array(
+    13	        'name'                  => 'Grupos',
+    14	        'singular_name'         => 'Grupo',
+    15	        'menu_name'             => 'Grupos',
+    16	        'name_admin_bar'        => 'Grupo',
+    17	        'add_new'               => 'Añadir nuevo',
+    18	        'add_new_item'          => 'Añadir nuevo grupo',
+    19	        'new_item'              => 'Nuevo grupo',
+    20	        'edit_item'             => 'Editar grupo',
+    21	        'view_item'             => 'Ver grupo',
+    22	        'all_items'             => 'Todos los grupos',
+    23	        'search_items'          => 'Buscar grupos',
+    24	        'parent_item_colon'     => 'Grupo padre:',
+    25	        'not_found'             => 'No se han encontrado grupos.',
+    26	        'not_found_in_trash'    => 'No se han encontrado grupos en la papelera.',
+    27	    );
+    28	
+    29	    $args = array(
+    30	        'labels'                => $labels,
+    31	        'public'                => false, // No público, solo accesible vía queries o backend.
+    32	        'show_ui'               => true,  // Se muestra en el admin para facilitar test y gestión.
+    33	        'show_in_menu'          => true,
+    34	        'menu_icon'             => 'dashicons-groups',
+    35	        'supports'              => array( 'title' ),
+    36	        'has_archive'           => false,
+    37	        'rewrite'               => false,
+    38	        'show_in_rest'          => false,
+    39	        'capability_type'       => 'post',
+    40	    );
+    41	
+    42	    register_post_type( 'grupo', $args );
+    43	}
+    44	add_action( 'init', 'str_registrar_cpt_grupo' );

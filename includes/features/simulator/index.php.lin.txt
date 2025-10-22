@@ -1,0 +1,119 @@
+     1	<?php
+     2	/**
+     3	 * Plantilla: Simulador de Torneo (por parejas)
+     4	 * Antiguo: /saas-torneos-de-raqueta/templates/torneos/simulador-torneo.php
+     5	 */
+     6	
+     7	if (!defined('ABSPATH')) { exit; }
+     8	
+     9	// Solo usuarios logueados
+    10	if (!is_user_logged_in()) {
+    11	    wp_redirect( wp_login_url() );
+    12	    exit;
+    13	}
+    14	
+    15	/**
+    16	 * Encolar assets del simulador
+    17	 */
+    18	wp_enqueue_style(
+    19	    'str-simulador-torneo',
+    20	    plugin_dir_url(__DIR__ . '/../../') . 'assets/css/simulador-torneo.css',
+    21	    [],
+    22	    '1.0.0'
+    23	);
+    24	
+    25	wp_enqueue_script(
+    26	    'str-simulador-torneo',
+    27	    plugin_dir_url(__DIR__ . '/../../') . 'assets/js/simulador-torneo.js',
+    28	    ['jquery'],
+    29	    '1.0.0',
+    30	    true
+    31	);
+    32	
+    33	// Localizar AJAX URL y nonce para el JS
+    34	wp_localize_script('str-simulador-torneo', 'str_ajax_obj', [
+    35	    'ajax_url' => admin_url('admin-ajax.php'),
+    36	    'nonce'    => wp_create_nonce('str_nonce'),
+    37	    // URL de la página de creación (fallback). Si tu slug es distinto, cámbialo en el handler.
+    38	    'crear_competicion_url' => site_url('/crear-competicion/'),
+    39	]);
+    40	
+    41	get_header();
+    42	?>
+    43	
+    44	<div class="str-simulador-torneo">
+    45	    <!-- Columna izquierda: Formulario -->
+    46	    <div class="str-simulador-torneo-col">
+    47	        <h1>Simulador de Torneo</h1>
+    48	
+    49	        <form id="form-simulador-torneo" class="str-simulador-formulario">
+    50	            <!-- Fijo por parejas: sin selector de tipo -->
+    51	
+    52	            <div class="str-simulador-form-group">
+    53	                <label for="simulador_n_jugadores">Número total de jugadores</label>
+    54	                <input type="number" id="simulador_n_jugadores" name="simulador_n_jugadores" min="2" required>
+    55	            </div>
+    56	
+    57	            <!-- Sin nº de pistas -->
+    58	
+    59	            <div class="str-simulador-form-group">
+    60	                <label for="simulador_n_grupos">Número de grupos (opcional)</label>
+    61	                <input type="number" id="simulador_n_grupos" name="simulador_n_grupos" min="0" placeholder="Déjalo vacío para sugerencia automática">
+    62	            </div>
+    63	
+    64	            <div class="str-simulador-form-group">
+    65	                <label for="simulador_fase_final">Fase final</label>
+    66	                <select id="simulador_fase_final" name="simulador_fase_final">
+    67	                    <option value="final">Final</option>
+    68	                    <option value="semifinal">Semifinal y Final</option>
+    69	                    <option value="cuartos">Cuartos, Semifinal y Final</option>
+    70	                    <option value="octavos">Octavos, Cuartos, Semifinal y Final</option>
+    71	                </select>
+    72	            </div>
+    73	
+    74	            <div class="str-simulador-form-group">
+    75	                <label>Organizar cuadro final</label>
+    76	                <div class="simulador-final-opciones">
+    77	                    <label style="display:block;margin-bottom:6px;">
+    78	                        <input type="radio" name="simulador_organizar_final" value="premios_grupo" checked>
+    79	                        Premios por grupo
+    80	                        <div class="simulador-final-help" style="font-size:.9em;color:#61708f;margin:4px 0 0 26px;">
+    81	                            Cada grupo tiene su propio cuadro final (no se mezclan entre grupos).
+    82	                        </div>
+    83	                    </label>
+    84	                    <label style="display:block;">
+    85	                        <input type="radio" name="simulador_organizar_final" value="mezclar">
+    86	                        Mezclar grupos
+    87	                        <div class="simulador-final-help" style="font-size:.9em;color:#61708f;margin:4px 0 0 26px;">
+    88	                            Los clasificados de todos los grupos compiten en un único cuadro final.
+    89	                        </div>
+    90	                    </label>
+    91	                </div>
+    92	            </div>
+    93	
+    94	            <button type="submit" class="str-btn-simular">Simular torneo</button>
+    95	        </form>
+    96	    </div>
+    97	
+    98	    <!-- Columna derecha: Resultados -->
+    99	    <div class="str-simulador-torneo-col str-simulador-visual">
+   100	        <!-- Mensajes educativos o de advertencia -->
+   101	        <div id="simulador-msg-sugerencias" class="simulador-msg-sugerencias"></div>
+   102	
+   103	        <!-- Resultados de grupos y cuadro final -->
+   104	        <div id="simulador-resultados"></div>
+   105	
+   106	        <!-- NUEVO: Barra de acciones posterior a la simulación -->
+   107	        <div id="simulador-acciones" style="margin-top:16px;display:none;">
+   108	            <button id="btn-crear-competicion" class="str-btn-simular" style="max-width:280px;">
+   109	                Crear competición
+   110	            </button>
+   111	            <div style="font-size:.92em;color:#61708f;margin-top:6px;">
+   112	                Se abrirá el formulario de creación con los datos de esta simulación.
+   113	            </div>
+   114	        </div>
+   115	    </div>
+   116	</div>
+   117	
+   118	<?php
+   119	get_footer();

@@ -1,0 +1,144 @@
+     1	<?php
+     2	// Plantilla Perfil de Jugador - SaaS Torneos de Raqueta
+     3	// Antiguo: /templates/jugador/perfil-jugador.php
+     4	// NOTA: Maquetado estático inicial. Aquí solo HTML y comentarios. La lógica dinámica vendrá después.
+     5	
+     6	?>
+     7	<!-- CSS exclusivo del perfil de jugador -->
+     8	<link rel="stylesheet" href="<?php echo STR_PLUGIN_URL . 'assets/css/perfil-jugador.css'; ?>">
+     9	
+    10	<div class="perfil-jugador-wrapper">
+    11	    <!-- Cabecera con nombre del jugador -->
+    12	    <div class="perfil-jugador-header">
+    13	        <h2 id="nombre-jugador"><?php the_title(); ?></h2>
+    14	    </div>
+    15	
+    16	    <!-- Tabla de estadísticas generales con selector de deporte -->
+    17	    <div class="perfil-jugador-estadisticas">
+    18	        <div class="perfil-jugador-filtros">
+    19	            <label for="selector-deporte">Deporte</label>
+    20	            <select id="selector-deporte" name="deporte">
+    21	                <option value="padel">Pádel</option>
+    22	                <option value="tenis">Tenis</option>
+    23	                <option value="pickleball">Pickleball</option>
+    24	                <option value="tenis_playa">Tenis Playa</option>
+    25	            </select>
+    26	        </div>
+    27	        <table class="tabla-estadisticas">
+    28	            <tr>
+    29	                <td>Partidos jugados</td>
+    30	                <td id="estadistica-jugados">x</td>
+    31	            </tr>
+    32	            <tr>
+    33	                <td>Partidos ganados</td>
+    34	                <td id="estadistica-ganados">x</td>
+    35	                <td id="estadistica-ganados-porcentaje">%</td>
+    36	            </tr>
+    37	            <tr>
+    38	                <td>Partidos perdidos</td>
+    39	                <td id="estadistica-perdidos">x</td>
+    40	                <td id="estadistica-perdidos-porcentaje">%</td>
+    41	            </tr>
+    42	            <tr>
+    43	                <td>Racha partidos ganados</td>
+    44	                <td id="racha-ganados">x</td>
+    45	                <td id="racha-ganados-porcentaje">%</td>
+    46	            </tr>
+    47	            <tr>
+    48	                <td>Racha partidos perdidos</td>
+    49	                <td id="racha-perdidos">x</td>
+    50	                <td id="racha-perdidos-porcentaje">%</td>
+    51	            </tr>
+    52	        </table>
+    53	    </div>
+    54	
+    55	    <!-- Tabla/listado de competiciones jugadas -->
+    56	    <div class="perfil-jugador-competiciones">
+    57	        <div class="perfil-jugador-filtros">
+    58	            <label for="filtro-deporte-comp">Deporte</label>
+    59	            <select id="filtro-deporte-comp" name="deporte_comp">
+    60	                <option value="todos">Todos</option>
+    61	                <option value="padel">Pádel</option>
+    62	                <option value="tenis">Tenis</option>
+    63	                <option value="pickleball">Pickleball</option>
+    64	                <option value="tenis_playa">Tenis Playa</option>
+    65	            </select>
+    66	            <label for="filtro-ano-comp">Año</label>
+    67	            <select id="filtro-ano-comp" name="ano_comp">
+    68	                <option value="todos">Todos</option>
+    69	                <option value="2025">2025</option>
+    70	                <option value="2024">2024</option>
+    71	                <option value="2023">2023</option>
+    72	                <!-- Añadir más años dinámicamente en el futuro -->
+    73	            </select>
+    74	        </div>
+    75	        <table class="tabla-competiciones">
+    76	            <thead>
+    77	                <tr>
+    78	                    <th>Competición</th>
+    79	                    <th>Posición</th>
+    80	                    <th>Fecha</th>
+    81	                </tr>
+    82	            </thead>
+    83	            <tbody>
+    84	                <!-- Ejemplo de fila -->
+    85	                <tr>
+    86	                    <td>Torneo Madrid</td>
+    87	                    <td>3º grupo</td>
+    88	                    <td>27/09/25</td>
+    89	                </tr>
+    90	                <tr>
+    91	                    <td>Torneo Barcelona</td>
+    92	                    <td>Ganador</td>
+    93	                    <td>13/10/25</td>
+    94	                </tr>
+    95	                <!-- Aquí se cargarán dinámicamente las competiciones -->
+    96	            </tbody>
+    97	        </table>
+    98	    </div>
+    99	
+   100	    <!-- Botón y pop-up de conectar jugador SOLO para administrador/cliente -->
+   101	    <?php if ( current_user_can('manage_options') || current_user_can('cliente') ) : ?>
+   102	        <button id="btn-conectar-jugador" type="button">Conectar jugador</button>
+   103	
+   104	        <!-- Modal de edición de jugador (oculto por defecto) -->
+   105	        <div id="modal-editar-jugador" class="modal-editar-jugador" style="display:none;">
+   106	            <div class="modal-contenido">
+   107	                <button id="cerrar-modal-editar-jugador" class="modal-cerrar">&times;</button>
+   108	                <h3>Editar datos del jugador</h3>
+   109	                <form id="form-editar-jugador" autocomplete="off">
+   110	                    <div class="campo-form">
+   111	                        <label for="editar-nombre">Nombre</label>
+   112	                        <input type="text" id="editar-nombre" name="nombre" required>
+   113	                    </div>
+   114	                    <div class="campo-form">
+   115	                        <label for="editar-apellido">Apellido</label>
+   116	                        <input type="text" id="editar-apellido" name="apellido" required>
+   117	                    </div>
+   118	                    <div class="campo-form">
+   119	                        <label for="editar-email">Email</label>
+   120	                        <input type="email" id="editar-email" name="email" required>
+   121	                    </div>
+   122	                    <div class="campo-form">
+   123	                        <label for="editar-telefono">Teléfono</label>
+   124	                        <input type="text" id="editar-telefono" name="telefono" required>
+   125	                    </div>
+   126	                    <button type="submit" id="guardar-edicion-jugador">Guardar cambios</button>
+   127	                    <div id="mensaje-editar-jugador" style="margin-top:10px;"></div>
+   128	                </form>
+   129	            </div>
+   130	        </div>
+   131	    <?php endif; ?>
+   132	
+   133	    <!-- NOTA: La lógica dinámica, AJAX y JS se integrará en siguientes fases -->
+   134	</div>
+   135	<!-- Bloque JS y variables globales -->
+   136	<script>
+   137	window.str_ajax_obj = {
+   138	    ajax_url: '<?php echo admin_url('admin-ajax.php'); ?>',
+   139	    nonce: '<?php echo wp_create_nonce('str_nonce'); ?>'
+   140	};
+   141	window.strJugadorId = <?php echo get_the_ID(); ?>;
+   142	</script>
+   143	<script src="<?php echo STR_PLUGIN_URL . 'assets/js/perfil-jugador.js'; ?>"></script>
+   144	

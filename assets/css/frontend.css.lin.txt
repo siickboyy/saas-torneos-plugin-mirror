@@ -1,0 +1,88 @@
+     1	/* === RESET BÁSICO === */
+     2	* {
+     3	  margin: 0;
+     4	  padding: 0;
+     5	  box-sizing: border-box;
+     6	}
+     7	
+     8	/* === BASE GLOBAL === */
+     9	:root {
+    10	  --color-primario: #0055cc;
+    11	  --color-secundario: #f5f5f5;
+    12	  --color-texto: #222;
+    13	  --color-fondo: #ffffff;
+    14	  --fuente-principal: 'Inter', system-ui, sans-serif;
+    15	}
+    16	
+    17	body {
+    18	  font-family: var(--fuente-principal);
+    19	  background-color: var(--color-fondo);
+    20	  color: var(--color-texto);
+    21	  font-size: 16px;
+    22	  line-height: 1.6;
+    23	  padding: 1rem;
+    24	}
+    25	
+    26	/* === TÍTULOS === */
+    27	h1, h2, h3 {
+    28	  font-weight: bold;
+    29	  margin: 1rem 0 0.5rem;
+    30	}
+    31	
+    32	h1 {
+    33	  font-size: 2rem;
+    34	}
+    35	
+    36	h2 {
+    37	  font-size: 1.5rem;
+    38	}
+    39	
+    40	h3 {
+    41	  font-size: 1.2rem;
+    42	}
+    43	
+    44	/* === ENLACES === */
+    45	a {
+    46	  color: var(--color-primario);
+    47	  text-decoration: none;
+    48	}
+    49	
+    50	a:hover {
+    51	  text-decoration: underline;
+    52	}
+    53	
+    54	/* === BOTÓN GENÉRICO === */
+    55	.str-btn {
+    56	  display: inline-block;
+    57	  background-color: var(--color-primario);
+    58	  color: #fff;
+    59	  padding: 0.6rem 1.2rem;
+    60	  border: none;
+    61	  border-radius: 6px;
+    62	  font-weight: 600;
+    63	  cursor: pointer;
+    64	}
+    65	
+    66	.str-btn:hover {
+    67	  background-color: #003f99;
+    68	}
+    69	
+    70	/* === RESPONSIVE === */
+    71	@media (max-width: 768px) {
+    72	  body {
+    73	    font-size: 15px;
+    74	    padding: 0.5rem;
+    75	  }
+    76	
+    77	  h1 {
+    78	    font-size: 1.7rem;
+    79	  }
+    80	
+    81	  h2 {
+    82	    font-size: 1.4rem;
+    83	  }
+    84	
+    85	  h3 {
+    86	    font-size: 1.1rem;
+    87	  }
+    88	}

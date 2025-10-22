@@ -1,0 +1,613 @@
+     1	<?php
+     2	/**
+     3	 * Plugin Name: SaaS Torneos de Raqueta
+     4	 * Description: Plugin para la gestión de competiciones de pádel, tenis, pickleball y tenis playa.
+     5	 * Version: 1.0.0
+     6	 * Author: Tu Nombre
+     7	 * Text Domain: saas-torneos
+     8	 * Domain Path: /languages
+     9	 */
+    10	
+    11	if ( ! defined( 'ABSPATH' ) ) exit; // Evitar acceso directo
+    12	
+    13	if ( ! defined( 'STR_PLUGIN_VERSION' ) ) {
+    14	    define( 'STR_PLUGIN_VERSION', '0.2.0' ); // pon aquí tu versión actual para probar
+    15	}
+    16	
+    17	/**
+    18	 * Registrar el shortcode [str_version]
+    19	 * Devuelve la versión del plugin.
+    20	 */
+    21	add_action( 'init', function () {
+    22	    add_shortcode( 'str_version', function () {
+    23	        return 'SaaS Torneos versión: ' . esc_html( STR_PLUGIN_VERSION );
+    24	    } );
+    25	} );
+    26	
+    27	// ======================================================
+    28	// Constantes
+    29	// ======================================================
+    30	define( 'STR_PLUGIN_PATH', plugin_dir_path( __FILE__ ) );
+    31	define( 'STR_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
+    32	
+    33	// ======================================================
+    34	// Guardián de errores críticos (solo LOG, sin alterar lógica)
+    35	// ======================================================
+    36	if ( ! function_exists('str_trap_php_errors_init') ) {
+    37	
+    38	    // Fallback local por si str_escribir_log aún no existe cuando disparemos
+    39	    if ( ! function_exists('str__safe_write_log') ) {
+    40	        function str__safe_write_log( $msg, $tag = 'FATAL-GUARD' ) {
+    41	            $base = defined('STR_PLUGIN_PATH') ? STR_PLUGIN_PATH : plugin_dir_path(__FILE__);
+    42	            $ruta = rtrim($base, '/\\') . '/debug-saas-torneos.log';
+    43	            $ts   = date('[Y-m-d H:i:s]');
+    44	            if (is_array($msg) || is_object($msg)) { $msg = print_r($msg, true); }
+    45	            @file_put_contents($ruta, $ts . " [$tag] " . $msg . PHP_EOL, FILE_APPEND | LOCK_EX);
+    46	        }
+    47	    }
+    48	
+    49	    function str_trap_php_errors_init() {
+    50	        set_error_handler(function($errno, $errstr, $errfile, $errline){
+    51	            if (!(error_reporting() & $errno)) { return false; }
+    52	            $m = "[PHP-ERROR:$errno] $errstr | $errfile:$errline";
+    53	            if (function_exists('str_escribir_log')) { str_escribir_log($m, 'FATAL-GUARD'); }
+    54	            else { str__safe_write_log($m, 'FATAL-GUARD'); }
+    55	            return false;
+    56	        });
+    57	
+    58	        set_exception_handler(function($ex){
+    59	            $m = get_class($ex) . ': ' . $ex->getMessage() . ' | ' . $ex->getFile() . ':' . $ex->getLine();
+    60	            if (function_exists('str_escribir_log')) { str_escribir_log($m, 'FATAL-GUARD-EX'); }
+    61	            else { str__safe_write_log($m, 'FATAL-GUARD-EX'); }
+    62	        });
+    63	
+    64	        register_shutdown_function(function(){
+    65	            $e = error_get_last();
+    66	            if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+    67	                $m = "[{$e['type']}] {$e['message']} | {$e['file']}:{$e['line']}";
+    68	                if (function_exists('str_escribir_log')) { str_escribir_log($m, 'FATAL-SHUTDOWN'); }
+    69	                else { str__safe_write_log($m, 'FATAL-SHUTDOWN'); }
+    70	            }
+    71	        });
+    72	    }
+    73	    str_trap_php_errors_init();
+    74	}
+    75	
+    76	// ======================================================
+    77	if ( ! function_exists( 'str_escribir_log' ) ) {
+    78	    function str_escribir_log( $mensaje, $origen = '' ) {
+    79	        $ruta_log = STR_PLUGIN_PATH . 'debug-saas-torneos.log';
+    80	        $timestamp = date('[Y-m-d H:i:s]');
+    81	        $origen = $origen ? "[$origen]" : '';
+    82	        if ( is_array($mensaje) || is_object($mensaje) ) {
+    83	            $mensaje = print_r($mensaje, true);
+    84	        }
+    85	        $linea = "$timestamp $origen $mensaje" . PHP_EOL;
+    86	        @file_put_contents( $ruta_log, $linea, FILE_APPEND | LOCK_EX );
+    87	    }
+    88	}
+    89	
+    90	// ======================================================
+    91	// Diagnóstico mínimo (mantener arriba)
+    92	// ======================================================
+    93	require_once STR_PLUGIN_PATH . 'includes/diagnostico.php';
+    94	
+    95	// ======================================================
+    96	// ENDPOINT simulador: /panel/simulador-torneo/
+    97	// ======================================================
+    98	add_action('init', function() {
+    99	    add_rewrite_rule('^panel/simulador-torneo/?$', 'index.php?simulador_torneo=1', 'top');
+   100	});
+   101	add_filter('query_vars', function($vars){
+   102	    $vars[] = 'simulador_torneo';
+   103	    return $vars;
+   104	});
+   105	add_action('template_include', function($template){
+   106	    if (intval(get_query_var('simulador_torneo')) === 1) {
+   107	        if (is_user_logged_in() && (current_user_can('cliente') || current_user_can('administrator'))) {
+   108	            return STR_PLUGIN_PATH . 'includes/features/simulator/index.php';
+   109	        } else {
+   110	            wp_redirect( home_url('/login/') );
+   111	            exit;
+   112	        }
+   113	    }
+   114	    return $template;
+   115	});
+   116	
+   117	// ======================================================
+   118	// Font Awesome (global)
+   119	// ======================================================
+   120	add_action( 'wp_enqueue_scripts', function() {
+   121	    wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css' );
+   122	});
+   123	
+   124	// ======================================================
+   125	require_once STR_PLUGIN_PATH . 'includes/cpt/cpt-competicion.php';
+   126	require_once STR_PLUGIN_PATH . 'includes/cpt/cpt-jugadores.php';
+   127	require_once STR_PLUGIN_PATH . 'includes/cpt/cpt-parejas.php';
+   128	require_once STR_PLUGIN_PATH . 'includes/cpt/cpt-partidos.php';
+   129	require_once STR_PLUGIN_PATH . 'includes/cpt/cpt-grupo.php';
+   130	
+   131	require_once STR_PLUGIN_PATH . 'includes/functions/roles.php';
+   132	require_once STR_PLUGIN_PATH . 'includes/functions/shortcodes.php';
+   133	require_once STR_PLUGIN_PATH . 'includes/shortcodes/init.php';
+   134	require_once STR_PLUGIN_PATH . 'includes/functions/crear-competicion.php';
+   135	require_once STR_PLUGIN_PATH . 'includes/functions/login-redirect.php';
+   136	
+   137	// Admin columns
+   138	require_once STR_PLUGIN_PATH . 'includes/admin-columns/columns-competicion.php';
+   139	require_once STR_PLUGIN_PATH . 'includes/admin-columns/columns-jugadores.php';
+   140	require_once STR_PLUGIN_PATH . 'includes/features/groups/ajax/manage.php';
+   141	
+   142	// ======================================================
+   143	// AUTOLOAD de AJAX por módulos “features” (sin logs)
+   144	// ======================================================
+   145	$__STR_AJAX_MAP = (function () {
+   146	    return [
+   147	
+   148	        // PLAYERS
+   149	        'saas_cargar_modal_invitacion' => [
+   150	            'includes/features/players/ajax/cargar-modal.php',
+   151	            'includes/ajax/ajax-cargar-modal-invitacion.php',
+   152	        ],
+   153	        'saas_invitacion_automatica' => [
+   154	            'includes/features/players/ajax/cargar-form-automatica.php',
+   155	            'includes/ajax/ajax-cargar-form-invitacion-automatica.php',
+   156	        ],
+   157	        'saas_invitacion_manual' => [
+   158	            'includes/features/players/ajax/cargar-form-manual.php',
+   159	            'includes/ajax/ajax-cargar-form-invitacion-manual.php',
+   160	        ],
+   161	        'saas_invitacion_enviar' => [
+   162	            'includes/features/players/ajax/invitar-jugador.php',
+   163	            'includes/ajax/ajax-invitar-jugador.php',
+   164	        ],
+   165	        'saas_invitacion_enviar_manual' => [
+   166	            'includes/features/players/ajax/invitar-jugador-manual.php',
+   167	            'includes/ajax/ajax-invitar-jugador-manual.php',
+   168	        ],
+   169	        'saas_registro_jugador' => [
+   170	            'includes/features/players/ajax/registro-jugador.php',
+   171	            'includes/ajax/ajax-registro-jugador.php',
+   172	        ],
+   173	        'saas_comprobar_jugador' => [
+   174	            'includes/features/players/ajax/comprobar-jugador.php',
+   175	            'includes/ajax/ajax-comprobar-jugador.php',
+   176	        ],
+   177	        'saas_cargar_estadisticas_jugador' => [
+   178	            'includes/features/players/ajax/cargar-estadisticas.php',
+   179	            'includes/ajax/ajax-cargar-estadisticas-jugador.php',
+   180	        ],
+   181	        'saas_cargar_competiciones_jugador' => [
+   182	            'includes/features/players/ajax/cargar-competiciones.php',
+   183	            'includes/ajax/ajax-cargar-competiciones-jugador.php',
+   184	        ],
+   185	        'saas_editar_jugador' => [
+   186	            'includes/features/players/ajax/editar-jugador.php',
+   187	            'includes/ajax/ajax-editar-jugador.php',
+   188	        ],
+   189	
+   190	        // PAIRS
+   191	        'saas_buscar_jugadores' => [
+   192	            'includes/features/pairs/ajax/buscar-jugadores.php',
+   193	            'includes/ajax/ajax-buscar-jugadores.php',
+   194	        ],
+   195	        'saas_guardar_pareja_multiseleccion' => [
+   196	            'includes/features/pairs/ajax/guardar-pareja.php',
+   197	            'includes/ajax/ajax-guardar-pareja-multiseleccion.php',
+   198	        ],
+   199	        'saas_listar_parejas_multiseleccion' => [
+   200	            'includes/features/pairs/ajax/listar-parejas.php',
+   201	            'includes/ajax/ajax-listar-parejas-multiseleccion.php',
+   202	        ],
+   203	
+   204	        // GROUPS
+   205	        // (las acciones concretas de crear/asignar/quitar se cargarán
+   206	        // desde los archivos si existen — el autoloader los incluye si file_exists)
+   207	        'saas_grupo_crear' => [
+   208	            'includes/features/groups/ajax/grupo-crear.php',
+   209	            'includes/ajax/ajax-grupo-crear.php',
+   210	        ],
+   211	        'str_grupo_crear' => [
+   212	            'includes/features/groups/ajax/grupo-crear.php',
+   213	            'includes/ajax/ajax-grupo-crear.php',
+   214	        ],
+   215	
+   216	        'saas_grupos_cargar' => [
+   217	            'includes/features/groups/ajax/grupos-cargar.php',
+   218	            'includes/ajax/ajax-grupos-cargar.php',
+   219	        ],
+   220	        'saas_grupos_aleatorio' => [
+   221	            'includes/features/groups/ajax/grupos-aleatorio.php',
+   222	            'includes/ajax/ajax-grupos-aleatorio.php',
+   223	        ],
+   224	        'saas_grupo_asignar_pareja' => [
+   225	            'includes/features/groups/ajax/grupo-asignar-pareja.php',
+   226	            'includes/ajax/ajax-grupo-asignar-pareja.php',
+   227	        ],
+   228	        'saas_grupos_standings' => [
+   229	            'includes/features/groups/ajax/standings-grupo.php',
+   230	            'includes/ajax/ajax-standings-grupo.php',
+   231	        ],
+   232	        'saas_bracket_volcar' => [
+   233	            'includes/features/groups/ajax/bracket-volcar.php',
+   234	            'includes/ajax/ajax-bracket-volcar.php',
+   235	        ],
+   236	
+   237	        // RESULTS — Pádel
+   238	        'str_guardar_resultado' => [
+   239	            'includes/features/results/padel/ajax/guardar-resultado.php',
+   240	            'includes/ajax/ajax-guardar-resultado.php',
+   241	        ],
+   242	
+   243	        // TORNEO - edición básica (legacy)
+   244	        'saas_guardar_torneo' => [
+   245	            'includes/ajax/ajax-guardar-torneo.php',
+   246	        ],
+   247	
+   248	        // SIMULADOR (legacy)
+   249	        'saas_simular_torneo' => [
+   250	            'includes/ajax/ajax-simular-torneo.php',
+   251	        ],
+   252	        'saas_guardar_simulacion' => [
+   253	            'includes/ajax/ajax-guardar-simulacion.php',
+   254	        ],
+   255	
+   256	        // EDITAR TORNEO (guardar por AJAX)
+   257	        'str_guardar_torneo_editado' => [
+   258	            'includes/features/tournaments/ajax/guardar-torneo.php',
+   259	            'includes/ajax/ajax-guardar-torneo-editado.php',
+   260	        ],
+   261	
+   262	    ];
+   263	})();
+   264	
+   265	(function ($ajax_map) {
+   266	    foreach ( $ajax_map as $action => $paths ) {
+   267	        $found = false;
+   268	        foreach ( $paths as $idx => $rel ) {
+   269	            $abs = STR_PLUGIN_PATH . $rel;
+   270	            if ( file_exists( $abs ) ) {
+   271	                require_once $abs;
+   272	                $found = true;
+   273	                break;
+   274	            }
+   275	        }
+   276	        // Si no se encuentra, se omite silenciosamente (sin logs)
+   277	    }
+   278	})($__STR_AJAX_MAP);
+   279	
+   280	
+   281	
+   282	// ======================================================
+   283	// AUDITORÍA F11 (temporal): /wp-admin/?str_audit=1 (sin logs)
+   284	// ======================================================
+   285	add_action('admin_init', function() use ($__STR_AJAX_MAP) {
+   286	    if ( ! current_user_can('administrator') ) return;
+   287	    if ( ! isset($_GET['str_audit']) || intval($_GET['str_audit']) !== 1 ) return;
+   288	
+   289	    $legacy_dir = STR_PLUGIN_PATH . 'includes/ajax/';
+   290	    $legacy = [];
+   291	    if ( is_dir($legacy_dir) ) {
+   292	        foreach ( glob($legacy_dir . '*.php') as $file ) {
+   293	            $legacy[] = str_replace(STR_PLUGIN_PATH, '', $file);
+   294	        }
+   295	    }
+   296	
+   297	    foreach ($legacy as $relPath) {
+   298	        $mapped_action = null;
+   299	        $features_path = null;
+   300	
+   301	        foreach ($__STR_AJAX_MAP as $action => $paths) {
+   302	            if ( in_array($relPath, $paths, true) ) {
+   303	                $mapped_action = $action;
+   304	                $features_path = $paths[0] ?? null;
+   305	                break;
+   306	            }
+   307	        }
+   308	        // Sin salida visible; solo auditoría.
+   309	    }
+   310	});
+   311	
+   312	// ======================================================
+   313	// Filtros de correo (remitente)
+   314	// ======================================================
+   315	add_filter('wp_mail_from', function($from_email) { return 'info@torneospadelxperience.es'; });
+   316	add_filter('wp_mail_from_name', function($from_name) { return 'Torneos Padel Xperience'; });
+   317	
+   318	// ======================================================
+   319	// i18n
+   320	// ======================================================
+   321	add_action( 'plugins_loaded', function() {
+   322	    load_plugin_textdomain( 'saas-torneos', false, dirname( plugin_basename(__FILE__) ) . '/languages' );
+   323	});
+   324	
+   325	// ======================================================
+   326	// Enqueue: frontend base
+   327	// ======================================================
+   328	add_action('wp_enqueue_scripts', function() {
+   329	    wp_enqueue_style(
+   330	        'str-frontend-css',
+   331	        STR_PLUGIN_URL . 'assets/css/frontend.css',
+   332	        [],
+   333	        '1.0'
+   334	    );
+   335	
+   336	    wp_enqueue_script(
+   337	        'str-frontend-js',
+   338	        STR_PLUGIN_URL . 'assets/js/frontend.js',
+   339	        ['jquery'],
+   340	        '1.0',
+   341	        true
+   342	    );
+   343	
+   344	    wp_localize_script('str-frontend-js', 'str_ajax_obj', [
+   345	        'ajax_url' => admin_url('admin-ajax.php'),
+   346	        'nonce'    => wp_create_nonce('str_nonce')
+   347	    ]);
+   348	});
+   349	
+   350	// ======================================================
+   351	// Enqueue: dashboard cliente (condicional)
+   352	// ======================================================
+   353	add_action('wp_enqueue_scripts', function() {
+   354	    if ( is_page(['panel-del-cliente', 'mis-competiciones', 'jugadores', 'ajustes']) ) {
+   355	        wp_enqueue_style(
+   356	            'str-dashboard-cliente-css',
+   357	            STR_PLUGIN_URL . 'assets/css/dashboard-cliente.css',
+   358	            [],
+   359	            '1.1'
+   360	        );
+   361	    }
+   362	});
+   363	
+   364	// ======================================================
+   365	// Enqueue: crear competición (shortcode/página)
+   366	// ======================================================
+   367	add_action('wp_enqueue_scripts', function() {
+   368	    wp_enqueue_script(
+   369	        'str-frontend-js',
+   370	        STR_PLUGIN_URL . 'assets/js/frontend.js',
+   371	        ['jquery'],
+   372	        '1.0',
+   373	        true
+   374	    );
+   375	
+   376	    if ( (is_page('panel-del-cliente') && (isset($_GET['seccion']) && $_GET['seccion'] === 'nueva-competicion')) || is_page('crear-competicion') ) {
+   377	        wp_enqueue_script(
+   378	            'str-nueva-competicion-js',
+   379	            STR_PLUGIN_URL . 'assets/js/nueva-competicion.js',
+   380	            ['jquery'],
+   381	            '1.0',
+   382	            true
+   383	        );
+   384	    }
+   385	});
+   386	
+   387	// ======================================================
+   388	// Enqueue: simulador (solo en /panel/simulador-torneo/)
+   389	// ======================================================
+   390	add_action('wp_enqueue_scripts', function() {
+   391	    global $wp_query;
+   392	    if ( isset($wp_query->query_vars['simulador_torneo']) && intval($wp_query->query_vars['simulador_torneo']) === 1 ) {
+   393	        wp_enqueue_script( 'jquery' );
+   394	
+   395	        wp_enqueue_script(
+   396	            'str-simulador-torneo-js',
+   397	            STR_PLUGIN_URL . 'assets/js/simulador-torneo.js',
+   398	            ['jquery'],
+   399	            '1.0',
+   400	            true
+   401	        );
+   402	
+   403	        wp_enqueue_style(
+   404	            'str-simulador-torneo-css',
+   405	            STR_PLUGIN_URL . 'assets/css/simulador-torneo.css',
+   406	            [],
+   407	            '1.0'
+   408	        );
+   409	
+   410	        wp_localize_script('str-simulador-torneo-js', 'str_ajax_obj', [
+   411	            'ajax_url' => admin_url('admin-ajax.php'),
+   412	            'nonce'    => wp_create_nonce('str_nonce')
+   413	        ]);
+   414	    }
+   415	});
+   416	
+   417	// ======================================================
+   418	// Routing de plantillas personalizadas
+   419	// ======================================================
+   420	add_filter('template_include', function($template) {
+   421	    if ( ! is_singular('competicion') ) return $template;
+   422	
+   423	    global $post;
+   424	    if ( ! isset($post->ID) ) return $template;
+   425	
+   426	    $deporte = function_exists('get_field') ? get_field('deporte', $post->ID) : '';
+   427	    $tipo    = function_exists('get_field') ? get_field('tipo_competicion', $post->ID) : '';
+   428	
+   429	    if ( strtolower($deporte) === 'padel' && strtolower($tipo) === 'torneo' ) {
+   430	        $torneo_template = STR_PLUGIN_PATH . 'includes/sports/padel/torneo/index.php';
+   431	        if ( file_exists($torneo_template) ) return $torneo_template;
+   432	    }
+   433	
+   434	    if ( strtolower($deporte) === 'padel' && strtolower($tipo) === 'ranking' ) {
+   435	        $ranking_template = STR_PLUGIN_PATH . 'templates/padel/ranking.php';
+   436	        if ( file_exists($ranking_template) ) return $ranking_template;
+   437	    }
+   438	
+   439	    return $template;
+   440	}, 10);
+   441	
+   442	// Perfil de jugador
+   443	add_filter('template_include', function($template){
+   444	    if ( ! is_singular('jugador_deportes') ) return $template;
+   445	
+   446	    $perfil_template = STR_PLUGIN_PATH . 'templates/jugador/perfil-jugador.php';
+   447	    if ( file_exists($perfil_template) ) return $perfil_template;
+   448	
+   449	    return $template;
+   450	}, 20);
+   451	
+   452	// Enqueue específico de perfil jugador
+   453	add_action('wp_enqueue_scripts', function() {
+   454	    if ( is_singular('jugador_deportes') ) {
+   455	        wp_enqueue_script(
+   456	            'str-perfil-jugador-js',
+   457	            STR_PLUGIN_URL . 'assets/js/perfil-jugador.js',
+   458	            ['jquery'],
+   459	            '1.0',
+   460	            true
+   461	        );
+   462	        wp_localize_script('str-perfil-jugador-js', 'str_ajax_obj', [
+   463	            'ajax_url' => admin_url('admin-ajax.php'),
+   464	            'nonce'    => wp_create_nonce('str_nonce')
+   465	        ]);
+   466	    }
+   467	});
+   468	
+   469	// ======================================================
+   470	// Enqueue por módulo en la ficha de TORNEO (Pádel)
+   471	// ======================================================
+   472	add_action('wp_enqueue_scripts', function() {
+   473	
+   474	    if ( ! is_singular('competicion') ) return;
+   475	
+   476	    global $post;
+   477	    if ( empty($post) ) return;
+   478	
+   479	    $deporte = function_exists('get_field') ? get_field('deporte', $post->ID) : '';
+   480	    $tipo    = function_exists('get_field') ? get_field('tipo_competicion', $post->ID) : '';
+   481	    if ( strtolower($deporte) !== 'padel' || strtolower($tipo) !== 'torneo' ) return;
+   482	
+   483	    $post_id = (int) $post->ID;
+   484	
+   485	    $reg = function( $handle, $rel_path, $deps = ['jquery'], $in_footer = true, $is_style = false ) {
+   486	        $abs = STR_PLUGIN_PATH . $rel_path;
+   487	        $ver = file_exists($abs) ? @filemtime($abs) : '1.0';
+   488	        $url = STR_PLUGIN_URL  . $rel_path;
+   489	
+   490	        if ( $is_style ) {
+   491	            if ( file_exists($abs) ) {
+   492	                wp_register_style( $handle, $url, [], $ver );
+   493	                wp_enqueue_style( $handle );
+   494	                return true;
+   495	            }
+   496	        } else {
+   497	            if ( file_exists($abs) ) {
+   498	                wp_register_script( $handle, $url, $deps, $ver, $in_footer );
+   499	                wp_enqueue_script( $handle );
+   500	                return true;
+   501	            }
+   502	        }
+   503	        return false;
+   504	    };
+   505	
+   506	    // ---------- VISTA TORNEO ----------
+   507	    $ok_js  = $reg('saas-torneo-view-js',  'includes/sports/padel/torneo/index.js');
+   508	    $ok_css = $reg('saas-torneo-view-css', 'includes/sports/padel/torneo/index.css', [], false, true);
+   509	
+   510	    // ---------- PAIRS ----------
+   511	    $ok_js  = $reg('saas-pairs-js',  'includes/features/pairs/index.js');
+   512	    $ok_css = $reg('saas-pairs-css', 'includes/features/pairs/index.css', [], false, true);
+   513	    if ( ! $ok_js ) { $reg('saas-pairs-js',  'assets/js/form-parejas-multiseleccion.js'); }
+   514	    if ( ! $ok_css ) { $reg('saas-pairs-css', 'assets/css/form-parejas-multiseleccion.css', [], false, true); }
+   515	    wp_localize_script('saas-pairs-js', 'str_parejas_ajax_obj', [
+   516	        'ajax_url' => admin_url('admin-ajax.php'),
+   517	        'nonce'    => wp_create_nonce('str_parejas_multiseleccion_nonce'),
+   518	        'post_id'  => $post_id,
+   519	        'actions'  => [
+   520	            'buscar'  => 'str_buscar_jugadores',
+   521	            'guardar' => 'str_guardar_pareja_multiseleccion',
+   522	            'listar'  => 'str_listar_parejas_multiseleccion',
+   523	        ],
+   524	    ]);
+   525	
+   526	    // ---------- PLAYERS ----------
+   527	    $ok_js  = $reg('saas-players-js',  'includes/features/players/index.js');
+   528	    $ok_css = $reg('saas-players-css', 'includes/features/players/index.css', [], false, true);
+   529	    if ( ! $ok_js ) { $reg('saas-players-js',  'assets/js/form-invitacion-jugador.js'); }
+   530	    if ( ! $ok_css ) {
+   531	        $reg('saas-players-css', 'assets/css/form-invitacion-jugador.css', [], false, true);
+   532	        $reg('saas-players-css-manual', 'assets/css/form-invitacion-jugador-manual.css', [], false, true);
+   533	    }
+   534	    wp_localize_script('saas-players-js', 'str_players_ajax_obj', [
+   535	        'ajax_url' => admin_url('admin-ajax.php'),
+   536	        'nonce'    => wp_create_nonce('str_nonce'),
+   537	        'post_id'  => $post_id,
+   538	        'actions'  => [
+   539	            'cargar_modal'   => 'str_cargar_modal_invitacion',
+   540	            'form_auto'      => 'str_cargar_form_invitacion_automatica',
+   541	            'form_manual'    => 'str_cargar_form_invitacion_manual',
+   542	            'enviar_auto'    => 'str_invitar_jugador',
+   543	            'enviar_manual'  => 'str_invitar_jugador_manual',
+   544	            'registro_token' => 'str_registro_jugador',
+   545	        ],
+   546	    ]);
+   547	
+   548	    // ---------- GROUPS ----------
+   549	    $ok_js  = $reg('saas-groups-js',  'includes/features/groups/index.js');
+   550	    $ok_css = $reg('saas-groups-css', 'includes/features/groups/index.css', [], false, true);
+   551	    if ( ! $ok_js ) { $reg('saas-groups-js',  'assets/js/grupos-torneo.js'); }
+   552	    if ( ! $ok_css ) { $reg('saas-groups-css', 'assets/css/grupos-torneo.css', [], false, true); }
+   553	
+   554	    // **ÚNICO CAMBIO MÍNIMO**: añadimos 'crear' => 'saas_grupo_crear'
+   555	    $groups_actions = [
+   556	        'crear'     => 'saas_grupo_crear',
+   557	        'cargar'    => 'saas_grupos_cargar',
+   558	        'aleatorio' => 'saas_grupos_aleatorio',
+   559	        'asignar'   => 'saas_grupo_asignar_pareja',
+   560	        'standings' => 'saas_grupos_standings',
+   561	        'bracket'   => 'saas_bracket_volcar',
+   562	    ];
+   563	    $groups_payload = [
+   564	        'ajax_url' => admin_url('admin-ajax.php'),
+   565	        'nonce'    => wp_create_nonce('str_nonce'),
+   566	        'post_id'  => $post_id,
+   567	        'actions'  => $groups_actions,
+   568	    ];
+   569	    wp_localize_script('saas-groups-js', 'str_groups_ajax_obj', $groups_payload);
+   570	
+   571	    // ENQUEUE LOG (lo dejas igual si ya lo tenías)
+   572	    try {
+   573	        $log_data = [
+   574	            'post_id'   => $post_id,
+   575	            'has_nonce' => ! empty($groups_payload['nonce']),
+   576	            'actions'   => $groups_actions,
+   577	            'handle'    => 'saas-groups-js',
+   578	            'route'     => 'competicion',
+   579	        ];
+   580	        str_escribir_log('[GRUPOS:ENQUEUE] ' . wp_json_encode($log_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'GROUPS');
+   581	    } catch (\Throwable $e) {}
+   582	
+   583	    // ---------- RESULTS (PÁDEL) ----------
+   584	    $ok_js  = $reg('saas-resultado-padel-js',  'includes/features/results/padel/index.js');
+   585	    $ok_css = $reg('saas-resultado-padel-css', 'includes/features/results/padel/index.css', [], false, true);
+   586	    if ( ! $ok_js ) { $reg('saas-resultado-padel-js',  'assets/js/form-resultado-partido.js'); }
+   587	    if ( ! $ok_css ) { $reg('saas-resultado-padel-css', 'assets/css/form-resultado-partido.css', [], false, true); }
+   588	    wp_localize_script('saas-resultado-padel-js', 'str_resultado_ajax_obj', [
+   589	        'ajax_url' => admin_url('admin-ajax.php'),
+   590	        'nonce'    => wp_create_nonce('str_nonce'),
+   591	        'post_id'  => $post_id,
+   592	        'actions'  => [ 'guardar' => 'str_guardar_resultado' ],
+   593	    ]);
+   594	
+   595	    if ( ! function_exists( 'str_enqueue_tournaments_css_only' ) ) {
+   596	        function str_enqueue_tournaments_css_only() {
+   597	            if ( ! is_singular( 'competicion' ) ) { return; }
+   598	            $rel = 'includes/features/tournaments/index.css';
+   599	            $abs = plugin_dir_path( __FILE__ ) . $rel;
+   600	            $url = plugin_dir_url( __FILE__ )  . $rel;
+   601	            if ( file_exists( $abs ) ) {
+   602	                $ver = filemtime( $abs );
+   603	                wp_enqueue_style( 'str_tournaments_css', $url, array(), $ver );
+   604	            }
+   605	        }
+   606	        add_action( 'wp_enqueue_scripts', 'str_enqueue_tournaments_css_only', 20 );
+   607	    }
+   608	
+   609	}, 20);
+   610	
+   611	if (!defined('ABSPATH')) { exit; }
+   612	define('STR_PLUGIN_VERSION', '0.1.1'); // súbelo un número
+   613	add_shortcode('str_version', fn() => 'SaaS Torneos versión: ' . esc_html(STR_PLUGIN_VERSION));

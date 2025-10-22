@@ -1,0 +1,81 @@
+     1	<!-- Contenedor del fondo gris -->
+     2	<div id="modal-nueva-competicion" class="str-modal-overlay" style="display: none;" data-modal-auto-open="true">
+     3	    <div class="str-modal-contenido">
+     4	        <button class="str-modal-cerrar" id="cerrar-modal-competicion">✖</button>
+     5	
+     6	        <h2>Crear nueva competición</h2>
+     7	        <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
+     8	            <input type="hidden" name="action" value="str_guardar_competicion">
+     9	            <input type="hidden" name="str_crear_competicion" value="1">
+    10	
+    11	            <label>Título del torneo</label>
+    12	            <input type="text" name="titulo" required>
+    13	
+    14	            <label>Deporte</label>
+    15	            <select name="deporte" required>
+    16	                <option value="">Selecciona...</option>
+    17	                <option value="Padel">Pádel</option>
+    18	                <option value="Tenis">Tenis</option>
+    19	                <option value="Pickleball">Pickleball</option>
+    20	                <option value="Tenis Playa">Tenis Playa</option>
+    21	            </select>
+    22	
+    23	            <label>Tipo de competición</label>
+    24	            <select name="tipo_competicion" required>
+    25	                <option value="">Selecciona...</option>
+    26	                <option value="Torneo">Torneo</option>
+    27	                <option value="Ranking">Ranking</option>
+    28	            </select>
+    29	
+    30	            <label>Categoría</label>
+    31	            <select name="categoria" required>
+    32	                <option value="">Selecciona...</option>
+    33	                <option value="Masculina">Masculina</option>
+    34	                <option value="Femenina">Femenina</option>
+    35	                <option value="Mixta">Mixta</option>
+    36	            </select>
+    37	
+    38	            <label>Formato</label>
+    39	            <select name="formato_competicion" required>
+    40	                <option value="">Selecciona...</option>
+    41	                <option value="Grupos">Grupos</option>
+    42	                <option value="Grupos + Bracket Final">Grupos + Bracket Final</option>
+    43	            </select>
+    44	
+    45	            <label>Sistema de puntuación</label>
+    46	            <select name="sistema_puntuacion" required>
+    47	                <option value="">Selecciona...</option>
+    48	                <option value="3v-1d">Victoria 3 pts / Derrota 1 pt</option>
+    49	                <option value="3v-0d">Victoria 3 pts / Derrota 0 pts</option>
+    50	            </select>
+    51	
+    52	            <label>Nº de jugadores/parejas</label>
+    53	            <input type="number" name="n_jugadores" min="2" required>
+    54	
+    55	            <label>Descripción</label>
+    56	            <textarea name="descripcion_competicion" rows="3"></textarea>
+    57	
+    58	            <!-- Condicionales -->
+    59	            <div class="tipo_torneo">
+    60	                <label>Fecha del torneo</label>
+    61	                <input type="date" name="fecha_torneo">
+    62	
+    63	                <label>Hora inicio</label>
+    64	                <input type="time" name="hora_inicio">
+    65	
+    66	                <label>Hora fin</label>
+    67	                <input type="time" name="hora_fin">
+    68	            </div>
+    69	
+    70	            <div class="tipo_ranking">
+    71	                <label>Fecha de inicio</label>
+    72	                <input type="date" name="fecha_inicio">
+    73	
+    74	                <label>Fecha de fin</label>
+    75	                <input type="date" name="fecha_fin">
+    76	            </div>
+    77	
+    78	            <button type="submit" class="str-btn">Crear competición</button>
+    79	        </form>
+    80	    </div>
+    81	</div>

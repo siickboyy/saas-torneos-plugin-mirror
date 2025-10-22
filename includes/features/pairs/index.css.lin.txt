@@ -1,0 +1,241 @@
+     1	/* ======================================================================
+     2	   PAREJAS · Modal multiselección + ficha
+     3	   - Mantiene colores actuales (azul primario)
+     4	   - Mejora jerarquía, espaciado y legibilidad
+     5	   - Sin tocar HTML/JS existentes
+     6	   ====================================================================== */
+     7	
+     8	/* ===== Variables (fallbacks si el tema no tiene) ===================== */
+     9	:root{
+    10	  --str-primary: #2152ff;        /* azul primario */
+    11	  --str-primary-600: #1e46e6;
+    12	  --str-neutral-50: #f8fafc;
+    13	  --str-neutral-75: #f5f7fb;
+    14	  --str-neutral-100: #eef3fb;
+    15	  --str-neutral-200: #e6ebf5;
+    16	  --str-neutral-300: #d9e2ef;
+    17	  --str-neutral-500: #667085;
+    18	  --str-text: #1a1f36;
+    19	  --str-muted: #6b7280;
+    20	  --str-success: #10b981;
+    21	  --str-error: #ef4444;
+    22	  --str-radius-lg: 16px;
+    23	  --str-radius-md: 10px;
+    24	  --str-radius-sm: 8px;
+    25	}
+    26	
+    27	/* ===== Bloquear scroll cuando hay modal ============================== */
+    28	html.saas-tr-modal-open,
+    29	body.saas-tr-modal-open { overflow: hidden !important; }
+    30	
+    31	/* ===== Overlay del modal ============================================ */
+    32	.saas-tr-modal{
+    33	  position: fixed; inset: 0;
+    34	  display: none;                 /* cerrado por defecto */
+    35	  place-items: center;
+    36	  padding: clamp(12px, 3vw, 24px);
+    37	  background: rgba(17, 24, 39, .60);
+    38	  z-index: 999999;
+    39	  pointer-events: auto;
+    40	}
+    41	.saas-tr-modal.is-open{ display: grid; }
+    42	
+    43	/* ===== Diálogo ======================================================= */
+    44	.saas-tr-modal__dialog,
+    45	.saas-tr-modal_dialog{
+    46	  position: relative;
+    47	  width: min(1000px, 96vw);
+    48	  max-height: 92vh;
+    49	  overflow: auto;
+    50	  background: #fff;
+    51	  border-radius: var(--str-radius-lg);
+    52	  box-shadow: 0 18px 48px rgba(22, 28, 45, .25);
+    53	  padding: 22px 24px;
+    54	  color: var(--str-text);
+    55	}
+    56	
+    57	/* ===== Botón cerrar ================================================== */
+    58	.saas-tr-modal__close,
+    59	.saas-tr-modal_close,
+    60	#modal-parejas-multiseleccion .js-close-modal{
+    61	  position: absolute; top: 12px; right: 12px;
+    62	  width: 38px; height: 38px;
+    63	  display: inline-flex; align-items: center; justify-content: center;
+    64	  border-radius: var(--str-radius-sm);
+    65	  border: 1px solid var(--str-neutral-200);
+    66	  background: #fff; color: var(--str-text);
+    67	  font-size: 18px; line-height: 1; cursor: pointer; z-index: 2;
+    68	}
+    69	.saas-tr-modal__close:hover,
+    70	.saas-tr-modal_close:hover,
+    71	#modal-parejas-multiseleccion .js-close-modal:hover{
+    72	  background: var(--str-neutral-75);
+    73	}
+    74	
+    75	/* ===== Backdrop interno opcional ==================================== */
+    76	.saas-tr-modal__backdrop,
+    77	.saas-tr-modal_backdrop{
+    78	  position: absolute; inset: 0; pointer-events: none;
+    79	}
+    80	
+    81	/* Oculta cierres legacy redundantes si vinieran en el template */
+    82	#modal-parejas-multiseleccion .modal-cerrar,
+    83	#modal-parejas-multiseleccion .btn-cerrar,
+    84	#modal-parejas-multiseleccion .close,
+    85	#modal-parejas-multiseleccion .cerrar { display: none !important; }
+    86	
+    87	/* ===== Activación accesible por aria-hidden ========================== */
+    88	#modal-parejas-multiseleccion{ position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 9999; }
+    89	#modal-parejas-multiseleccion[aria-hidden="false"]{ display: flex; }
+    90	
+    91	/* ===== Caja de diálogo concreta del modal =========================== */
+    92	#modal-parejas-multiseleccion .saas-tr-modal_dialog,
+    93	#modal-parejas-multiseleccion .saas-tr-modal__dialog{
+    94	  width: min(1100px, 96vw);
+    95	  max-height: 90vh;
+    96	  box-shadow: 0 10px 40px rgba(18,24,40,.2);
+    97	}
+    98	
+    99	/* ===== Secciones internas: títulos y separación ===================== */
+   100	#modal-parejas-multiseleccion h2{ 
+   101	  font-size: 1.3rem; margin: 0 0 8px; font-weight: 700; color: var(--str-text);
+   102	}
+   103	#modal-parejas-multiseleccion h3{
+   104	  font-size: 1.05rem; margin: 18px 0 10px; font-weight: 700; color: var(--str-text);
+   105	}
+   106	
+   107	/* ===== Formulario de búsqueda ======================================= */
+   108	#form-buscar-jugadores{
+   109	  display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px;
+   110	  margin-bottom: 14px;
+   111	}
+   112	#form-buscar-jugadores input[type="text"],
+   113	#form-buscar-jugadores input[type="email"]{
+   114	  height: 40px; border: 1px solid var(--str-neutral-200);
+   115	  border-radius: var(--str-radius-sm);
+   116	  padding: 8px 10px; outline: none; background: #fff; color: var(--str-text);
+   117	}
+   118	#form-buscar-jugadores input:focus{
+   119	  border-color: var(--str-primary);
+   120	  box-shadow: 0 0 0 3px rgba(33,82,255,.12);
+   121	}
+   122	#form-buscar-jugadores button[type="submit"]{
+   123	  height: 40px; padding: 0 14px; border-radius: var(--str-radius-sm);
+   124	  border: 1px solid var(--str-primary); background: var(--str-primary); color:#fff; font-weight:600; cursor:pointer;
+   125	}
+   126	#form-buscar-jugadores button[type="submit"]:hover{
+   127	  background: var(--str-primary-600); border-color: var(--str-primary-600);
+   128	}
+   129	
+   130	@media (max-width: 900px){
+   131	  #form-buscar-jugadores{ grid-template-columns: 1fr 1fr; }
+   132	  #form-buscar-jugadores button[type="submit"]{ grid-column: 1 / -1; }
+   133	}
+   134	
+   135	/* ===== Pareja en preparación ======================================== */
+   136	#jugadores-seleccionados{
+   137	  background: var(--str-neutral-50);
+   138	  border: 1px solid var(--str-neutral-200);
+   139	  border-radius: var(--str-radius-md);
+   140	  padding: 10px 12px; min-height: 44px;
+   141	  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+   142	}
+   143	.jugador-seleccionado{
+   144	  display: inline-flex; align-items: center; gap: 6px;
+   145	  border: 1px solid var(--str-neutral-200);
+   146	  background: #fff; color: var(--str-text);
+   147	  padding: 6px 10px; border-radius: 999px; font-size: .92rem;
+   148	  box-shadow: 0 1px 0 rgba(0,0,0,.02);
+   149	}
+   150	.jugador-seleccionado strong{ font-weight: 700; }
+   151	.jugador-seleccionado .btn-quitar-jugador{
+   152	  width: 22px; height: 22px; line-height: 1;
+   153	  display: inline-flex; align-items: center; justify-content: center;
+   154	  border-radius: 999px; border: 1px solid var(--str-neutral-300);
+   155	  background: var(--str-neutral-75); color: #243b53; cursor: pointer;
+   156	  font-size: 14px; padding: 0;
+   157	}
+   158	.jugador-seleccionado .btn-quitar-jugador:hover{
+   159	  background: #e9eef9;
+   160	}
+   161	
+   162	/* Botón Confirmar */
+   163	#btn-confirmar-pareja{
+   164	  margin-top: 10px;
+   165	  height: 40px; padding: 0 16px; border-radius: var(--str-radius-sm);
+   166	  border: 1px solid var(--str-primary); background: var(--str-primary);
+   167	  color:#fff; font-weight: 700; cursor: pointer;
+   168	}
+   169	#btn-confirmar-pareja:disabled{
+   170	  opacity:.6; cursor:not-allowed;
+   171	}
+   172	#btn-confirmar-pareja:hover:not(:disabled){
+   173	  background: var(--str-primary-600); border-color: var(--str-primary-600);
+   174	}
+   175	
+   176	/* Mensajes de feedback */
+   177	#mensaje-parejas{ margin-top: 8px; font-size: .92rem; display:none; }
+   178	#mensaje-parejas.success{ color: var(--str-success); }
+   179	#mensaje-parejas.error{ color: var(--str-error); }
+   180	
+   181	/* ===== Tablas (jugadores y parejas confirmadas) ====================== */
+   182	.tabla-jugadores-disponibles,
+   183	.tabla-parejas-confirmadas{
+   184	  width: 100%;
+   185	  border-collapse: collapse;
+   186	  background: #fff;
+   187	  border: 1px solid var(--str-neutral-200);
+   188	  border-radius: var(--str-radius-md);
+   189	  overflow: hidden;                /* para que el radius afecte al thead */
+   190	  font-size: .95rem;
+   191	}
+   192	.tabla-jugadores-disponibles thead th,
+   193	.tabla-parejas-confirmadas thead th{
+   194	  background: var(--str-neutral-75);
+   195	  color: #1b2f6b; font-weight: 700;
+   196	  text-align: left; padding: 10px 12px;
+   197	  border-bottom: 1px solid var(--str-neutral-200);
+   198	}
+   199	.tabla-jugadores-disponibles tbody td,
+   200	.tabla-parejas-confirmadas tbody td{
+   201	  padding: 10px 12px;
+   202	  border-bottom: 1px solid var(--str-neutral-100);
+   203	  color: var(--str-text);
+   204	}
+   205	.tabla-jugadores-disponibles tbody tr:hover,
+   206	.tabla-parejas-confirmadas tbody tr:hover{
+   207	  background: #fafcff;
+   208	}
+   209	
+   210	/* Checkbox columna estrecha */
+   211	.tabla-jugadores-disponibles tbody td:first-child,
+   212	.tabla-jugadores-disponibles thead th:first-child{
+   213	  width: 44px;
+   214	}
+   215	
+   216	/* ===== Distribución en el modal: listas una debajo de otra en móvil == */
+   217	@media (max-width: 768px){
+   218	  #modal-parejas-multiseleccion .saas-tr-modal_dialog,
+   219	  #modal-parejas-multiseleccion .saas-tr-modal__dialog{
+   220	    padding: 16px; max-height: 94vh;
+   221	  }
+   222	}
+   223	
+   224	/* ===== Estética general del bloque en ficha ========================== */
+   225	#tabla-parejas{ border: 1px solid var(--str-neutral-200); border-radius: var(--str-radius-md); overflow: hidden; }
+   226	#tabla-parejas th{ background: var(--str-neutral-75); color:#1b2f6b; }
+   227	#tabla-parejas td, #tabla-parejas th{ padding: 10px 12px; }
+   228	
+   229	/* ===== Botones azules consistentes (por si se usan en el modal) ===== */
+   230	.saas-btn-primary{
+   231	  border: 1px solid var(--str-primary);
+   232	  background: var(--str-primary);
+   233	  color: #fff; border-radius: var(--str-radius-sm);
+   234	  padding: 8px 14px; font-weight: 700; cursor: pointer;
+   235	}
+   236	.saas-btn-primary:hover{ background: var(--str-primary-600); border-color: var(--str-primary-600); }
+   237	
+   238	/* ===== Ajustes menores ================================================== */
+   239	#modal-parejas-multiseleccion .saas-tr-modal_content,
+   240	#modal-parejas-multiseleccion .saas-tr-modal__content{ position: relative; }
+   241	

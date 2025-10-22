@@ -1,0 +1,39 @@
+     1	<?php
+     2	// /includes/functions/login-redirect.php
+     3	
+     4	add_filter('login_redirect', 'str_login_redirect_jugador_individual', 20, 3);
+     5	
+     6	function str_login_redirect_jugador_individual($redirect_to, $request, $user) {
+     7	    if (!isset($user->roles) || !is_array($user->roles)) {
+     8	        return $redirect_to;
+     9	    }
+    10	
+    11	    if (in_array('jugador', $user->roles)) {
+    12	        // Buscar el CPT "jugador_deportes" con el campo user_id = $user->ID
+    13	        $jugador_query = new WP_Query([
+    14	            'post_type'      => 'jugador_deportes',
+    15	            'posts_per_page' => 1,
+    16	            'meta_query'     => [
+    17	                [
+    18	                    'key'   => 'user_id',
+    19	                    'value' => $user->ID,
+    20	                    'compare' => '='
+    21	                ]
+    22	            ]
+    23	        ]);
+    24	
+    25	        if ($jugador_query->have_posts()) {
+    26	            $jugador_post = $jugador_query->posts[0];
+    27	            $url_jugador = get_permalink($jugador_post->ID);
+    28	            if ($url_jugador) {
+    29	                return $url_jugador;
+    30	            }
+    31	        }
+    32	
+    33	        // Si no tiene CPT, fallback a página de jugadores general
+    34	        return 'https://www.torneospadelxperience.es/jugador/';
+    35	    }
+    36	
+    37	    // Otros roles: redirección por defecto
+    38	    return $redirect_to;
+    39	}

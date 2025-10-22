@@ -1,0 +1,68 @@
+     1	document.addEventListener('DOMContentLoaded', function () {
+     2	  const btnEditar = document.getElementById('btn-editar-torneo');
+     3	  const modal = document.getElementById('modal-editar-torneo');
+     4	  const cerrarModal = document.getElementById('cerrar-modal-editar');
+     5	  const btnGuardar = document.getElementById('guardar-torneo');
+     6	
+     7	  // Mostrar el modal
+     8	  if (btnEditar && modal) {
+     9	    btnEditar.addEventListener('click', function (e) {
+    10	      e.preventDefault();
+    11	      modal.style.display = 'flex';
+    12	    });
+    13	  }
+    14	
+    15	  // Cerrar el modal con la X
+    16	  if (cerrarModal && modal) {
+    17	    cerrarModal.addEventListener('click', function () {
+    18	      modal.style.display = 'none';
+    19	    });
+    20	  }
+    21	
+    22	  // Cerrar el modal al hacer clic fuera del contenido
+    23	  window.addEventListener('click', function (e) {
+    24	    if (e.target === modal) {
+    25	      modal.style.display = 'none';
+    26	    }
+    27	  });
+    28	
+    29	  // Guardar los datos del torneo por AJAX
+    30	  if (btnGuardar) {
+    31	    btnGuardar.addEventListener('click', function () {
+    32	      const torneoID = btnGuardar.dataset.torneoId;
+    33	      const titulo = document.querySelector('input[name="titulo"]').value;
+    34	      const descripcion = document.querySelector('textarea[name="descripcion"]').value;
+    35	      const fecha = document.querySelector('input[name="fecha_torneo"]').value;
+    36	      const horaInicio = document.querySelector('input[name="hora_inicio"]').value;
+    37	      const horaFin = document.querySelector('input[name="hora_fin"]').value;
+    38	
+    39	      const datos = new FormData();
+    40	      datos.append('action', 'str_guardar_torneo_editado');
+    41	      datos.append('torneo_id', torneoID);
+    42	      datos.append('titulo', titulo);
+    43	      datos.append('descripcion', descripcion);
+    44	      datos.append('fecha_torneo', fecha);
+    45	      datos.append('hora_inicio', horaInicio);
+    46	      datos.append('hora_fin', horaFin);
+    47	
+    48	      fetch(str_ajax_obj.ajax_url, {
+    49	        method: 'POST',
+    50	        body: datos
+    51	      })
+    52	        .then(res => res.json())
+    53	        .then(respuesta => {
+    54	          if (respuesta.success) {
+    55	            alert('✅ Torneo actualizado correctamente');
+    56	            location.reload();
+    57	          } else {
+    58	            alert('❌ Error: ' + (respuesta.data || 'Intenta de nuevo.'));
+    59	            console.error(respuesta);
+    60	          }
+    61	        })
+    62	        .catch(err => {
+    63	          alert('❌ Error de red o servidor');
+    64	          console.error(err);
+    65	        });
+    66	    });
+    67	  }
+    68	});

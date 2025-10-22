@@ -1,0 +1,117 @@
+     1	<?php
+     2	// AJAX: Standings de grupos (provisional: usa clasificación_grupo si existe; si no, lista participantes con ceros)
+     3	// Acción: saas_grupos_standings
+     4	
+     5	if (!defined('ABSPATH')) { exit; }
+     6	
+     7	add_action('wp_ajax_saas_grupos_standings', 'saas_grupos_standings');
+     8	add_action('wp_ajax_nopriv_saas_grupos_standings', 'saas_grupos_standings');
+     9	
+    10	function saas_grupos_standings() {
+    11	    $t0 = microtime(true);
+    12	    $req_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('grp_stand_', true);
+    13	
+    14	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    15	    @ob_start();
+    16	
+    17	    if (function_exists('str_escribir_log')) {
+    18	        str_escribir_log('[START] POST='.print_r($_POST, true).' | req_id='.$req_id, 'GROUPS:STANDINGS');
+    19	    }
+    20	
+    21	    // Seguridad (puede permitir nopriv, pero siempre con nonce)
+    22	    $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : (isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce']) : '');
+    23	    if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    24	        str_escribir_log('[DENY] Nonce inválido | req_id='.$req_id, 'GROUPS:STANDINGS');
+    25	        return str_groups_json_error(['message' => 'Nonce inválido.']);
+    26	    }
+    27	
+    28	    $comp_id = isset($_POST['competicion_id']) ? intval($_POST['competicion_id']) : 0;
+    29	    if (!$comp_id) {
+    30	        return str_groups_json_error(['message' => 'ID de competición requerido.']);
+    31	    }
+    32	
+    33	    $grupos = get_posts([
+    34	        'post_type'      => 'grupo',
+    35	        'post_status'    => 'publish',
+    36	        'posts_per_page' => -1,
+    37	        'meta_query'     => [[
+    38	            'key'     => 'torneo_asociado',
+    39	            'value'   => '"' . $comp_id . '"',
+    40	            'compare' => 'LIKE',
+    41	        ]]
+    42	    ]);
+    43	
+    44	    $out = ['grupos' => []];
+    45	
+    46	    foreach ($grupos as $g) {
+    47	        $nombre = function_exists('get_field') ? get_field('nombre_grupo', $g->ID) : '';
+    48	        $letra  = $nombre ? $nombre : $g->post_title;
+    49	
+    50	        $rows = [];
+    51	
+    52	        // Si hay repeater 'clasificacion_grupo', lo usamos
+    53	        if (function_exists('have_rows') && have_rows('clasificacion_grupo', $g->ID)) {
+    54	            while (have_rows('clasificacion_grupo', $g->ID)) {
+    55	                the_row();
+    56	                $part = get_sub_field('clas_participante');
+    57	                $pos  = intval(get_sub_field('posicion'));
+    58	                $pts  = intval(get_sub_field('puntos'));
+    59	
+    60	                // normalizar ID
+    61	                if (is_array($part)) { $part = reset($part); }
+    62	                $pid = (is_object($part) && isset($part->ID)) ? intval($part->ID) : intval($part);
+    63	
+    64	                $rows[] = [
+    65	                    'id'        => $pid,
+    66	                    'title'     => get_the_title($pid) ?: ('Participante #'.$pid),
+    67	                    'pj'        => 0, 'pg' => 0, 'pp' => 0,
+    68	                    'pts'       => $pts,
+    69	                    'sets_f'    => 0, 'sets_c' => 0,
+    70	                    'juegos_f'  => 0, 'juegos_c'=> 0,
+    71	                    'pos'       => $pos,
+    72	                ];
+    73	            }
+    74	            // ordenar por pos asc, luego pts desc
+    75	            usort($rows, function($a,$b){
+    76	                if ($a['pos'] && $b['pos'] && $a['pos'] !== $b['pos']) return $a['pos'] <=> $b['pos'];
+    77	                return $b['pts'] <=> $a['pts'];
+    78	            });
+    79	        } else {
+    80	            // Si no hay clasificacion guardada, listar participantes actuales con valores a 0
+    81	            $miembros = function_exists('get_field') ? get_field('participantes_grupo', $g->ID) : [];
+    82	            $ids = [];
+    83	            if (is_array($miembros)) {
+    84	                foreach ($miembros as $item) { $ids[] = is_object($item) && isset($item->ID) ? intval($item->ID) : intval($item); }
+    85	            } elseif (is_numeric($miembros)) {
+    86	                $ids[] = intval($miembros);
+    87	            }
+    88	            foreach ($ids as $pid) {
+    89	                $rows[] = [
+    90	                    'id'       => $pid,
+    91	                    'title'    => get_the_title($pid) ?: ('Participante #'.$pid),
+    92	                    'pj'       => 0, 'pg'=>0, 'pp'=>0,
+    93	                    'pts'      => 0,
+    94	                    'sets_f'   => 0, 'sets_c'=>0,
+    95	                    'juegos_f' => 0, 'juegos_c'=>0,
+    96	                ];
+    97	            }
+    98	        }
+    99	
+   100	        $out['grupos'][] = [
+   101	            'id'    => $g->ID,
+   102	            'letra' => $letra,
+   103	            'items' => $rows,
+   104	        ];
+   105	    }
+   106	
+   107	    str_escribir_log('[END] OK grupos='.count($out['grupos']).' dur_ms='.round((microtime(true)-$t0)*1000).' | req_id='.$req_id, 'GROUPS:STANDINGS');
+   108	    return str_groups_json_ok($out);
+   109	}
+   110	
+   111	// Helpers JSON
+   112	if (!function_exists('str_groups_json_ok')) {
+   113	    function str_groups_json_ok(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_success($data); }
+   114	}
+   115	if (!function_exists('str_groups_json_error')) {
+   116	    function str_groups_json_error(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_error($data); }
+   117	}

@@ -1,0 +1,13 @@
+     1	<?php
+     2	// Antiguo /includes/ajax/ajax-cargar-form-invitacion-automatica.php
+     3	
+     4	add_action('wp_ajax_str_cargar_form_invitacion_automatica', 'str_cargar_form_invitacion_automatica');
+     5	add_action('wp_ajax_nopriv_str_cargar_form_invitacion_automatica', 'str_cargar_form_invitacion_automatica');
+     6	
+     7	function str_cargar_form_invitacion_automatica() {
+     8	    ob_start();
+     9	    include STR_PLUGIN_PATH . 'includes/forms/form-invitacion-jugador-automatica.php';
+    10	    $html = ob_get_clean();
+    11	    wp_send_json_success(['html' => $html]);
+    12	    exit;
+    13	}

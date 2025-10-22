@@ -1,0 +1,28 @@
+     1	<?php
+     2	// Redirección si ya está logueado
+     3	if (!is_admin() && is_user_logged_in() && !current_user_can('administrator')) {
+     4	    wp_redirect(home_url('/mis-competiciones'));
+     5	    exit;
+     6	}
+     7	
+     8	?>
+     9	
+    10	<form method="post" action="">
+    11	    <h3>Registro de cliente</h3>
+    12	
+    13	    <?php if (isset($_GET['registro']) && $_GET['registro'] == 'fallido'): ?>
+    14	        <div class="str-error">Error en el registro. El usuario o email ya existen.</div>
+    15	    <?php endif; ?>
+    16	
+    17	    <label for="username">Nombre de usuario</label>
+    18	    <input type="text" name="str_username" id="username" required>
+    19	
+    20	    <label for="email">Correo electrónico</label>
+    21	    <input type="email" name="str_email" id="email" required>
+    22	
+    23	    <label for="password">Contraseña</label>
+    24	    <input type="password" name="str_password" id="password" required>
+    25	
+    26	    <input type="submit" value="Registrarse">
+    27	    <input type="hidden" name="str_registro_cliente" value="1">
+    28	</form>

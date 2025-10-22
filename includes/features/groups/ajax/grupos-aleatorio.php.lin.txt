@@ -1,0 +1,109 @@
+     1	<?php
+     2	// AJAX: Rellenar grupos automáticamente con parejas libres
+     3	// Acción: saas_grupos_aleatorio
+     4	
+     5	if (!defined('ABSPATH')) { exit; }
+     6	
+     7	add_action('wp_ajax_saas_grupos_aleatorio', 'saas_grupos_aleatorio');
+     8	
+     9	function saas_grupos_aleatorio() {
+    10	    $t0 = microtime(true);
+    11	    $req_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('grp_auto_', true);
+    12	
+    13	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    14	    @ob_start();
+    15	
+    16	    if (function_exists('str_escribir_log')) {
+    17	        str_escribir_log('[START] POST='.print_r($_POST, true).' | req_id='.$req_id, 'GROUPS:ALEATORIO');
+    18	    }
+    19	
+    20	    // Seguridad
+    21	    $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : (isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce']) : '');
+    22	    if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    23	        str_escribir_log('[DENY] Nonce inválido | req_id='.$req_id, 'GROUPS:ALEATORIO');
+    24	        return str_groups_json_error(['message' => 'Nonce inválido.']);
+    25	    }
+    26	    if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    27	        str_escribir_log('[DENY] Permisos insuficientes | req_id='.$req_id, 'GROUPS:ALEATORIO');
+    28	        return str_groups_json_error(['message' => 'Permisos insuficientes.']);
+    29	    }
+    30	
+    31	    $comp_id = isset($_POST['competicion_id']) ? intval($_POST['competicion_id']) : 0;
+    32	    if (!$comp_id) {
+    33	        return str_groups_json_error(['message' => 'ID de competición requerido.']);
+    34	    }
+    35	
+    36	    // Grupos de la competición
+    37	    $grupos = get_posts([
+    38	        'post_type'      => 'grupo',
+    39	        'post_status'    => 'publish',
+    40	        'posts_per_page' => -1,
+    41	        'meta_query'     => [[
+    42	            'key'     => 'torneo_asociado',
+    43	            'value'   => '"' . $comp_id . '"',
+    44	            'compare' => 'LIKE',
+    45	        ]]
+    46	    ]);
+    47	    if (!$grupos) {
+    48	        return str_groups_json_error(['message' => 'No hay grupos creados para esta competición.']);
+    49	    }
+    50	
+    51	    // Parejas del torneo
+    52	    $parejas = get_posts([
+    53	        'post_type'      => 'pareja',
+    54	        'post_status'    => 'publish',
+    55	        'posts_per_page' => -1,
+    56	        'meta_query'     => [[
+    57	            'key'     => 'torneo_asociado',
+    58	            'value'   => '"' . $comp_id . '"',
+    59	            'compare' => 'LIKE',
+    60	        ]]
+    61	    ]);
+    62	    $parejas_ids = array_map(function($p){ return intval($p->ID); }, $parejas);
+    63	
+    64	    // Quitar las ya asignadas
+    65	    $asignadas = [];
+    66	    foreach ($grupos as $g) {
+    67	        $miembros = function_exists('get_field') ? get_field('participantes_grupo', $g->ID) : [];
+    68	        if (is_array($miembros)) {
+    69	            foreach ($miembros as $item) { $asignadas[] = is_object($item)&&isset($item->ID) ? intval($item->ID) : intval($item); }
+    70	        } elseif (is_numeric($miembros)) {
+    71	            $asignadas[] = intval($miembros);
+    72	        }
+    73	    }
+    74	    $asignadas = array_unique($asignadas);
+    75	    $libres    = array_values(array_diff($parejas_ids, $asignadas));
+    76	
+    77	    shuffle($libres);
+    78	
+    79	    // Distribución round-robin simple
+    80	    $i = 0;
+    81	    foreach ($libres as $pid) {
+    82	        $g = $grupos[$i % count($grupos)];
+    83	        $miembros = function_exists('get_field') ? get_field('participantes_grupo', $g->ID) : [];
+    84	        $ids = [];
+    85	        if (is_array($miembros)) {
+    86	            foreach ($miembros as $item) { $ids[] = is_object($item)&&isset($item->ID) ? intval($item->ID) : intval($item); }
+    87	        } elseif (is_numeric($miembros)) {
+    88	            $ids[] = intval($miembros);
+    89	        }
+    90	        if (!in_array($pid, $ids, true)) { $ids[] = $pid; }
+    91	        if (function_exists('update_field')) {
+    92	            update_field('participantes_grupo', $ids, $g->ID);
+    93	        } else {
+    94	            update_post_meta($g->ID, 'participantes_grupo', $ids);
+    95	        }
+    96	        $i++;
+    97	    }
+    98	
+    99	    str_escribir_log('[END] OK auto-llenado libres='.count($libres).' dur_ms='.round((microtime(true)-$t0)*1000).' | req_id='.$req_id, 'GROUPS:ALEATORIO');
+   100	    return str_groups_json_ok(['message' => 'Grupos rellenados automáticamente', 'libres_asignados' => count($libres)]);
+   101	}
+   102	
+   103	// Helpers JSON
+   104	if (!function_exists('str_groups_json_ok')) {
+   105	    function str_groups_json_ok(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_success($data); }
+   106	}
+   107	if (!function_exists('str_groups_json_error')) {
+   108	    function str_groups_json_error(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_error($data); }
+   109	}

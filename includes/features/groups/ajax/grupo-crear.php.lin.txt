@@ -1,0 +1,151 @@
+     1	<?php
+     2	// /includes/features/groups/ajax/grupo-crear.php
+     3	defined('ABSPATH') || exit;
+     4	
+     5	/**
+     6	 * Registrar la acción AJAX (solo usuarios logueados).
+     7	 * El JS llama a action: 'saas_grupo_crear'
+     8	 */
+     9	add_action('wp_ajax_saas_grupo_crear', 'saas_grupo_crear');
+    10	
+    11	/**
+    12	 * Helpers mínimos (con guardas para no redeclarar si en el futuro
+    13	 * incluyes otros archivos que definan lo mismo).
+    14	 */
+    15	if (!function_exists('str_groups__json_ok')) {
+    16	    function str_groups__json_ok($data = []) {
+    17	        if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    18	        wp_send_json_success($data);
+    19	    }
+    20	}
+    21	if (!function_exists('str_groups__json_error')) {
+    22	    function str_groups__json_error($data = [], $code = 400) {
+    23	        if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    24	        wp_send_json_error($data, $code);
+    25	    }
+    26	}
+    27	if (!function_exists('str_groups__require_caps')) {
+    28	    function str_groups__require_caps() {
+    29	        if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    30	            str_groups__json_error(['message' => 'Permisos insuficientes.'], 403);
+    31	        }
+    32	    }
+    33	}
+    34	if (!function_exists('str_groups__check_nonce')) {
+    35	    function str_groups__check_nonce() {
+    36	        $nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce'])
+    37	                 : (isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '');
+    38	        if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    39	            str_groups__json_error(['message' => 'Nonce inválido.'], 401);
+    40	        }
+    41	    }
+    42	}
+    43	if (!function_exists('str_groups__next_letter')) {
+    44	    /**
+    45	     * Devuelve el siguiente identificador disponible: A..Z, luego 1..99
+    46	     */
+    47	    function str_groups__next_letter($comp_id) {
+    48	        $args = [
+    49	            'post_type'      => 'grupo',
+    50	            'post_status'    => 'publish',
+    51	            'posts_per_page' => -1,
+    52	            'fields'         => 'ids',
+    53	            'meta_query'     => [[
+    54	                'key'     => 'torneo_asociado',
+    55	                'value'   => '"' . (int)$comp_id . '"',
+    56	                'compare' => 'LIKE',
+    57	            ]],
+    58	        ];
+    59	        $ids = get_posts($args);
+    60	        $usadas = [];
+    61	        foreach ($ids as $gid) {
+    62	            $nombre = function_exists('get_field') ? get_field('nombre_grupo', $gid) : get_post_meta($gid, 'nombre_grupo', true);
+    63	            if (!$nombre) {
+    64	                $t = get_the_title($gid);
+    65	                if (preg_match('~grupo\s+([A-Z0-9]+)~i', (string)$t, $m)) {
+    66	                    $nombre = strtoupper($m[1]);
+    67	                }
+    68	            }
+    69	            if ($nombre) { $usadas[] = strtoupper(trim($nombre)); }
+    70	        }
+    71	        $usadas = array_unique($usadas);
+    72	        foreach (range('A','Z') as $L) {
+    73	            if (!in_array($L, $usadas, true)) return $L;
+    74	        }
+    75	        for ($i=1; $i<=99; $i++) {
+    76	            if (!in_array((string)$i, $usadas, true)) return (string)$i;
+    77	        }
+    78	        return wp_generate_password(4, false);
+    79	    }
+    80	}
+    81	
+    82	/**
+    83	 * Controlador: crear grupo
+    84	 * POST:
+    85	 *  - competicion_id (int)  ← obligatorio
+    86	 *  - nombre (string)       ← opcional (si viene "Grupo B", guardamos título "Grupo B" y ACF nombre="B")
+    87	 */
+    88	if (!function_exists('saas_grupo_crear')) {
+    89	    function saas_grupo_crear() {
+    90	        str_groups__check_nonce();
+    91	        str_groups__require_caps();
+    92	
+    93	        $comp_id = isset($_POST['competicion_id']) ? (int) $_POST['competicion_id'] : 0;
+    94	        $nombre  = isset($_POST['nombre']) ? sanitize_text_field($_POST['nombre']) : '';
+    95	
+    96	        if (!$comp_id || get_post_type($comp_id) !== 'competicion') {
+    97	            str_groups__json_error(['message' => 'Competición inválida.']);
+    98	        }
+    99	
+   100	        // Autogenerar identificador si no llega nombre
+   101	        if ($nombre === '' || $nombre === null) {
+   102	            $nombre = str_groups__next_letter($comp_id); // A, B, C...
+   103	        }
+   104	
+   105	        // Construir TÍTULO y valor para el ACF 'nombre_grupo' evitando "Grupo Grupo X"
+   106	        $nombre_field = $nombre;
+   107	        if (preg_match('~^\s*grupo\s+(.+)$~i', $nombre, $m)) {
+   108	            // Usuario pasó "Grupo B" → título "Grupo B", ACF nombre="B"
+   109	            $title        = 'Grupo ' . trim($m[1]);
+   110	            $nombre_field = trim($m[1]);
+   111	        } else {
+   112	            // Usuario pasó "B" → título "Grupo B", ACF nombre="B"
+   113	            $title        = 'Grupo ' . trim($nombre);
+   114	            $nombre_field = trim($nombre);
+   115	        }
+   116	
+   117	        // Crear post grupo
+   118	        $post_id = wp_insert_post([
+   119	            'post_type'   => 'grupo',
+   120	            'post_status' => 'publish',
+   121	            'post_title'  => $title,
+   122	            'post_author' => get_current_user_id(),
+   123	        ], true);
+   124	
+   125	        if (is_wp_error($post_id) || !$post_id) {
+   126	            $msg = is_wp_error($post_id) ? $post_id->get_error_message() : 'Error desconocido';
+   127	            str_groups__json_error(['message' => 'No se pudo crear el grupo.', 'error' => $msg]);
+   128	        }
+   129	
+   130	        // Guardar ACF/meta (compatibles con tu definición)
+   131	        if (function_exists('update_field')) {
+   132	            update_field('torneo_asociado', [$comp_id], $post_id); // relationship (return id)
+   133	            update_field('nombre_grupo', $nombre_field, $post_id);
+   134	            update_field('participantes_grupo', [], $post_id);     // vacío al crear
+   135	        } else {
+   136	            update_post_meta($post_id, 'torneo_asociado', [$comp_id]);
+   137	            update_post_meta($post_id, 'nombre_grupo', $nombre_field);
+   138	            update_post_meta($post_id, 'participantes_grupo', []);
+   139	        }
+   140	
+   141	        str_groups__json_ok([
+   142	            'message' => 'Grupo creado.',
+   143	            'grupo'   => [
+   144	                'id'     => $post_id,
+   145	                'title'  => get_the_title($post_id),
+   146	                'nombre' => $nombre_field,
+   147	                'comp'   => $comp_id,
+   148	            ],
+   149	        ]);
+   150	    }
+   151	}

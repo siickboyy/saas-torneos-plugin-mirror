@@ -1,0 +1,764 @@
+     1	<?php
+     2	/**
+     3	 * Render de gestión de grupos en frontend (server-side)
+     4	 * - Lista parejas libres
+     5	 * - Lista grupos con participantes
+     6	 * - Acciones: crear grupo, asignar pareja, quitar pareja (con modal)
+     7	 * - Renombrar grupo + Eliminar grupo (modal Editar)
+     8	 * - Distribuir parejas (modal): vista previa y aplicación
+     9	 *
+    10	 * Acciones AJAX esperadas (con alias):
+    11	 *  - str_grupo_crear           (core: saas_grupo_crear)
+    12	 *  - str_grupo_asignar_pareja  (core: saas_grupo_asignar)
+    13	 *  - str_grupo_quitar_pareja   (core: saas_grupo_quitar)
+    14	 *  - str_grupo_renombrar       (core: saas_grupo_renombrar)
+    15	 *  - str_grupo_eliminar        (core: saas_grupo_eliminar)
+    16	 */
+    17	
+    18	if ( ! defined('ABSPATH') ) { exit; }
+    19	
+    20	if (!function_exists('str_competicion_grupos_render')):
+    21	
+    22	function str_competicion_grupos_render($args = []) {
+    23	    $args = wp_parse_args($args, [
+    24	        'competicion_id' => 0,
+    25	        'print_css'      => true,
+    26	    ]);
+    27	
+    28	    $comp_id = absint($args['competicion_id']);
+    29	    if ( ! $comp_id ) return '<!-- STR grupos: competicion_id vacío -->';
+    30	
+    31	    if (!function_exists('str_escribir_log')) {
+    32	        function str_escribir_log($m, $o='STR'){ @file_put_contents(WP_PLUGIN_DIR.'/saas-torneos-de-raqueta/debug-saas-torneos.log', "[".date('Y-m-d H:i:s')."] [$o] $m\n", FILE_APPEND); }
+    33	    }
+    34	
+    35	    $nonce = wp_create_nonce('str_nonce');
+    36	
+    37	    // === PUNTOS: función mínima, con filtro y meta opcional ===
+    38	    $__str_points_cache = [];
+    39	    $str_get_points = function(int $pair_id) use (&$__str_points_cache, $comp_id) : int {
+    40	        if (isset($__str_points_cache[$pair_id])) return $__str_points_cache[$pair_id];
+    41	
+    42	        // 1) filtro (puedes enganchar tus cálculos reales desde partidos)
+    43	        $pts = apply_filters('str_pair_points', null, $pair_id, (int)$comp_id);
+    44	
+    45	        // 2) metas opcionales (si algún día los guardas en meta/ACF)
+    46	        if ($pts === null) {
+    47	            foreach (['str_puntos_comp_'.(int)$comp_id, 'str_puntos', 'puntos'] as $mk) {
+    48	                $v = get_post_meta($pair_id, $mk, true);
+    49	                if ($v !== '' && $v !== null) { $pts = (int)$v; break; }
+    50	            }
+    51	        }
+    52	
+    53	        if ($pts === null) $pts = 0; // 3) por defecto
+    54	        return $__str_points_cache[$pair_id] = (int)$pts;
+    55	    };
+    56	
+    57	    // =============================
+    58	    // 1) Obtener GRUPOS del torneo
+    59	    // =============================
+    60	    $grupos = get_posts([
+    61	        'post_type'      => 'grupo',
+    62	        'post_status'    => 'publish',
+    63	        'posts_per_page' => -1,
+    64	        'meta_query'     => [[
+    65	            'key'     => 'torneo_asociado',
+    66	            'value'   => '"' . $comp_id . '"',
+    67	            'compare' => 'LIKE',
+    68	        ]],
+    69	        'orderby' => ['date' => 'ASC', 'ID' => 'ASC'],
+    70	    ]);
+    71	
+    72	    // Mapa de nombres de grupos (para el front)
+    73	    $map_grupos = []; // gid => "Grupo A"
+    74	    foreach ($grupos as $g) {
+    75	        $nombre_g = function_exists('get_field') ? get_field('nombre_grupo', $g->ID) : '';
+    76	        if (!$nombre_g) $nombre_g = $g->post_title ?: ('Grupo '.$g->ID);
+    77	        // Siempre mostramos con prefijo "Grupo "
+    78	        $map_grupos[$g->ID] = 'Grupo ' . trim($nombre_g);
+    79	    }
+    80	
+    81	    // =============================
+    82	    // 2) Obtener PAREJAS del torneo
+    83	    // =============================
+    84	    $parejas_eq = get_posts([
+    85	        'post_type'      => 'pareja',
+    86	        'post_status'    => 'publish',
+    87	        'posts_per_page' => -1,
+    88	        'meta_query'     => [[
+    89	            'key'     => 'torneo_asociado',
+    90	            'value'   => $comp_id,
+    91	            'compare' => '=',
+    92	        ]],
+    93	        'fields'  => 'ids',
+    94	    ]);
+    95	    $parejas_like = get_posts([
+    96	        'post_type'      => 'pareja',
+    97	        'post_status'    => 'publish',
+    98	        'posts_per_page' => -1,
+    99	        'meta_query'     => [[
+   100	            'key'     => 'torneo_asociado',
+   101	            'value'   => '"' . $comp_id . '"',
+   102	            'compare' => 'LIKE',
+   103	        ]],
+   104	        'fields'  => 'ids',
+   105	    ]);
+   106	    $parejas_torneo = array_values(array_unique(array_merge($parejas_eq, $parejas_like)));
+   107	
+   108	    // Mapa de nombres de pareja (para el front)
+   109	    $map_parejas = []; // pid => "Nombre pareja"
+   110	    foreach ($parejas_torneo as $pid) {
+   111	        $t = get_the_title($pid);
+   112	        $map_parejas[$pid] = $t ? $t : ('Pareja #'.$pid);
+   113	    }
+   114	
+   115	    // 3) Parejas asignadas a algún grupo
+   116	    $parejas_asignadas = [];
+   117	    $grupos_participantes = []; // gid => [pids]
+   118	    foreach ($grupos as $g) {
+   119	        $participantes = function_exists('get_field')
+   120	            ? get_field('participantes_grupo', $g->ID, false)
+   121	            : get_post_meta($g->ID, 'participantes_grupo', true);
+   122	        if (empty($participantes)) $participantes = [];
+   123	        if (!is_array($participantes)) $participantes = (array)$participantes;
+   124	        $participantes = array_map('absint', $participantes);
+   125	        $grupos_participantes[$g->ID] = $participantes;
+   126	        $parejas_asignadas = array_merge($parejas_asignadas, $participantes);
+   127	    }
+   128	    $parejas_asignadas = array_unique(array_filter($parejas_asignadas));
+   129	
+   130	    // 4) Parejas libres = todas del torneo – asignadas
+   131	    $parejas_libres = array_values(array_diff($parejas_torneo, $parejas_asignadas));
+   132	
+   133	    $nombre_pareja = function($pareja_id) use ($map_parejas) {
+   134	        return $map_parejas[$pareja_id] ?? ('Pareja #'.$pareja_id);
+   135	    };
+   136	
+   137	    ob_start();
+   138	    ?>
+   139	
+   140	    <?php if (!empty($args['print_css'])): ?>
+   141	    <style>
+   142	      /* Contenedor y elementos */
+   143	      .str-grupos-wrapper{margin:1.5rem 0;border:1px solid #e5e7eb;border-radius:12px;padding:16px;background:#fff}
+   144	      .str-grupos-header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+   145	      .str-grupos-actions{display:flex;gap:8px;flex-wrap:wrap}
+   146	      .str-badge{display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem;border:1px solid #e5e7eb;border-radius:999px;padding:.25rem .6rem;background:#f9fafb}
+   147	      .str-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+   148	      .str-card{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}
+   149	      .str-card-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+   150	      .str-card-ttl{font-weight:600}
+   151	      .str-card-actions{display:flex;gap:6px}
+   152	      .str-btn{appearance:none;border:1px solid #dbe6ff;background:#f8fbff;border-radius:10px;padding:10px 14px;cursor:pointer;color:#1a2156;font-weight:600;display:inline-flex;align-items:center;gap:8px;transition:box-shadow .15s, transform .06s, background .15s}
+   153	      .str-btn:hover{box-shadow:0 3px 10px rgba(40,65,100,0.12)}
+   154	      .str-btn:active{transform:translateY(1px)}
+   155	      .str-btn--primary{border-color:#2152ff;background:linear-gradient(92deg,#2152ff 0%,#3273f8 100%);color:#fff}
+   156	      .str-btn--primary:hover{box-shadow:0 3px 12px rgba(33,82,255,0.25)}
+   157	      .str-btn-danger{border-color:#fecaca;background:#fff5f5;color:#7f1d1d}
+   158	      .str-btn-danger:hover{background:#ef4444;color:#fff;border-color:#ef4444}
+   159	      .str-list{list-style:none;margin:0;padding:8px 12px;display:flex;flex-direction:column;gap:6px}
+   160	      .str-list li{border:1px solid #eef2f7;border-radius:8px;padding:6px 8px}
+   161	      /* NUEVO: maquetación de la fila con columna de puntos */
+   162	      .str-li{display:flex;align-items:center;justify-content:space-between;gap:8px}
+   163	      .str-li .str-name{flex:1 1 auto;min-width:0}
+   164	      .str-points{min-width:58px;text-align:center;border:1px solid #e5e7eb;border-radius:999px;padding:2px 10px;background:#f8fafc;font-variant-numeric:tabular-nums}
+   165	      .str-row-add{display:flex;gap:6px;padding:10px 12px;border-top:1px dashed #e5e7eb;background:#fcfcfd}
+   166	      .str-select{width:100%;padding:8px 10px;border:1.5px solid #d8e4ff;border-radius:8px;background:#fff;color:#1a2156}
+   167	      .str-select:focus{border-color:#2152ff;background:#f5f9ff;outline:none}
+   168	      .str-muted{color:#6b7280;font-size:.9rem}
+   169	
+   170	      /* Modal base */
+   171	      .str-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:9999}
+   172	      .str-modal.is-open{display:flex}
+   173	      .str-dialog{background:#fff;border-radius:12px;max-width:560px;width:92%;box-shadow:0 15px 40px rgba(0,0,0,.2);overflow:hidden}
+   174	      .str-dialog-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #e5e7eb}
+   175	      .str-dialog-bd{padding:14px}
+   176	      .str-dialog-ft{padding:12px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #e5e7eb}
+   177	      .str-input{width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px}
+   178	
+   179	      /* Vista previa distribución */
+   180	      .str-prev-wrap{max-height:320px;overflow:auto;border:1px solid #eef2f7;border-radius:10px;padding:8px;background:#fafafa}
+   181	      .str-prev-card{border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px;background:#fff}
+   182	      .str-prev-head{padding:8px 10px;border-bottom:1px solid #eef2f7;font-weight:600}
+   183	      .str-prev-body{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+   184	      .str-chip{display:inline-block;border:1px solid #e5e7eb;border-radius:999px;padding:2px 8px;margin:2px;background:#f8fafc;font-size:.9rem}
+   185	      .str-colcap{font-size:.85rem;color:#64748b;margin-bottom:6px}
+   186	    </style>
+   187	    <?php endif; ?>
+   188	
+   189	    <div id="str-grupos-wrapper"
+   190	         class="str-grupos-wrapper"
+   191	         data-ajax="<?php echo esc_attr(admin_url('admin-ajax.php')); ?>"
+   192	         data-nonce="<?php echo esc_attr($nonce); ?>"
+   193	         data-comp="<?php echo esc_attr($comp_id); ?>">
+   194	
+   195	        <div class="str-grupos-header">
+   196	            <div class="str-badges">
+   197	                <span class="str-badge">Grupos: <strong><?php echo count($grupos); ?></strong></span>
+   198	                <span class="str-badge">Parejas totales: <strong><?php echo count($parejas_torneo); ?></strong></span>
+   199	                <span class="str-badge">Parejas libres: <strong id="str-count-libres"><?php echo count($parejas_libres); ?></strong></span>
+   200	            </div>
+   201	            <div class="str-grupos-actions">
+   202	                <button class="str-btn" id="str-btn-distribuir">Distribuir parejas</button>
+   203	                <button class="str-btn str-btn--primary" id="str-btn-crear-grupo">Crear grupo</button>
+   204	            </div>
+   205	        </div>
+   206	
+   207	        <!-- Selector maestro de parejas libres -->
+   208	        <div style="margin:0 0 12px 0;">
+   209	            <label class="str-muted" for="str-select-libres">Parejas libres:</label>
+   210	            <select id="str-select-libres" class="str-select">
+   211	                <option value="">— Selecciona una pareja libre —</option>
+   212	                <?php foreach ($parejas_libres as $pid): ?>
+   213	                    <option value="<?php echo esc_attr($pid); ?>"><?php echo esc_html($nombre_pareja($pid)); ?></option>
+   214	                <?php endforeach; ?>
+   215	            </select>
+   216	        </div>
+   217	
+   218	        <!-- GRID DE GRUPOS -->
+   219	        <div class="str-grid">
+   220	            <?php if (empty($grupos)): ?>
+   221	                <div class="str-card">
+   222	                    <div class="str-card-hd">
+   223	                        <div class="str-card-ttl">Aún no hay grupos</div>
+   224	                    </div>
+   225	                    <div class="str-list">
+   226	                        <li class="str-muted">Usa “Crear grupo” para empezar.</li>
+   227	                    </div>
+   228	                </div>
+   229	            <?php else: ?>
+   230	                <?php foreach ($grupos as $grupo): ?>
+   231	                    <?php
+   232	                        $gid = $grupo->ID;
+   233	                        $nombre_g = $map_grupos[$gid] ?? ($grupo->post_title ?: 'Grupo '.$gid); // ya viene “Grupo X”
+   234	                        $participantes = $grupos_participantes[$gid] ?? [];
+   235	                    ?>
+   236	                    <div class="str-card" data-grupo-id="<?php echo esc_attr($gid); ?>">
+   237	                        <div class="str-card-hd">
+   238	                            <div class="str-card-ttl"><?php echo esc_html($nombre_g); ?></div>
+   239	                            <div class="str-card-actions">
+   240	                                <button class="str-btn js-editar-grupo"
+   241	                                        data-grupo-id="<?php echo esc_attr($gid); ?>"
+   242	                                        data-grupo-nombre="<?php echo esc_attr(preg_replace('~^\s*Grupo\s+~i','',$nombre_g)); ?>">
+   243	                                    Editar
+   244	                                </button>
+   245	                            </div>
+   246	                        </div>
+   247	                        <ul class="str-list">
+   248	                            <?php if (empty($participantes)): ?>
+   249	                                <li class="str-li">
+   250	                                    <span class="str-name str-muted">Sin participantes</span>
+   251	                                    <span class="str-points">—</span>
+   252	                                    <span><!-- vacío --></span>
+   253	                                </li>
+   254	                            <?php else: ?>
+   255	                                <?php foreach ($participantes as $pid): ?>
+   256	                                    <li class="str-li">
+   257	                                        <span class="str-name"><?php echo esc_html($nombre_pareja($pid)); ?></span>
+   258	
+   259	                                        <!-- NUEVO: puntos visibles (y listos para tiempo real) -->
+   260	                                        <span class="str-points str-points-val" data-pair-id="<?php echo esc_attr($pid); ?>">
+   261	                                            <?php echo (int) $str_get_points((int)$pid); ?>
+   262	                                        </span>
+   263	
+   264	                                        <button class="str-btn str-btn-danger js-quitar-pareja"
+   265	                                                data-grupo-id="<?php echo esc_attr($gid); ?>"
+   266	                                                data-pareja-id="<?php echo esc_attr($pid); ?>">
+   267	                                            Quitar
+   268	                                        </button>
+   269	                                    </li>
+   270	                                <?php endforeach; ?>
+   271	                            <?php endif; ?>
+   272	                        </ul>
+   273	                        <div class="str-row-add">
+   274	                            <select class="str-select js-select-pareja" data-grupo-id="<?php echo esc_attr($gid); ?>">
+   275	                                <option value="">— Añadir pareja libre a este grupo —</option>
+   276	                                <?php foreach ($parejas_libres as $pid): ?>
+   277	                                    <option value="<?php echo esc_attr($pid); ?>"><?php echo esc_html($nombre_pareja($pid)); ?></option>
+   278	                                <?php endforeach; ?>
+   279	                            </select>
+   280	                            <button class="str-btn js-add-pareja" data-grupo-id="<?php echo esc_attr($gid); ?>">Añadir</button>
+   281	                        </div>
+   282	                    </div>
+   283	                <?php endforeach; ?>
+   284	            <?php endif; ?>
+   285	        </div>
+   286	    </div>
+   287	
+   288	    <!-- Datos para JS: nombres de grupos y parejas -->
+   289	    <script id="str-json-data" type="application/json">
+   290	    <?php
+   291	      echo wp_json_encode([
+   292	        'groups'       => $map_grupos,             // gid => "Grupo A"
+   293	        'pairs'        => $map_parejas,            // pid => "Nombre pareja"
+   294	        'groupsPairs'  => $grupos_participantes,   // gid => [pids]
+   295	        'freePairs'    => $parejas_libres,         // [pids]
+   296	      ]);
+   297	    ?>
+   298	    </script>
+   299	
+   300	    <!-- MODALES + JS existentes (sin cambios) -->
+   301	    <div class="str-modal" id="str-modal-crear">
+   302	        <div class="str-dialog" role="dialog" aria-modal="true" aria-labelledby="str-modal-crear-ttl">
+   303	            <div class="str-dialog-hd">
+   304	                <strong id="str-modal-crear-ttl">Crear grupo</strong>
+   305	                <button class="str-btn" data-close="#str-modal-crear">✕</button>
+   306	            </div>
+   307	            <div class="str-dialog-bd">
+   308	                <label class="str-muted" for="str-inp-nombre-grupo">Nombre del grupo (opcional)</label>
+   309	                <input id="str-inp-nombre-grupo" class="str-input" type="text" placeholder="Ej. A, B, C...">
+   310	                <p class="str-muted" style="margin-top:8px">Si lo dejas en blanco se autogenerará.</p>
+   311	            </div>
+   312	            <div class="str-dialog-ft">
+   313	                <button class="str-btn" data-close="#str-modal-crear">Cancelar</button>
+   314	                <button class="str-btn str-btn--primary" id="str-btn-crear-confirm">Crear</button>
+   315	            </div>
+   316	        </div>
+   317	    </div>
+   318	
+   319	    <div class="str-modal" id="str-modal-rename">
+   320	        <div class="str-dialog" role="dialog" aria-modal="true" aria-labelledby="str-modal-rename-ttl">
+   321	            <div class="str-dialog-hd">
+   322	                <strong id="str-modal-rename-ttl">Renombrar grupo</strong>
+   323	                <button class="str-btn" data-close="#str-modal-rename">✕</button>
+   324	            </div>
+   325	            <div class="str-dialog-bd">
+   326	                <input id="str-inp-rename" class="str-input" type="text" placeholder="Nuevo nombre del grupo">
+   327	                <input id="str-inp-rename-grupo-id" type="hidden" value="">
+   328	                <p class="str-muted" style="margin-top:8px">El nombre debe ser único dentro de esta competición.</p>
+   329	            </div>
+   330	            <div class="str-dialog-ft" style="justify-content:space-between">
+   331	                <button class="str-btn str-btn-danger" id="str-btn-eliminar-grupo">Eliminar grupo</button>
+   332	                <div>
+   333	                    <button class="str-btn" data-close="#str-modal-rename">Cancelar</button>
+   334	                    <button class="str-btn str-btn--primary" id="str-btn-rename-confirm">Guardar</button>
+   335	                </div>
+   336	            </div>
+   337	        </div>
+   338	    </div>
+   339	
+   340	    <div class="str-modal" id="str-modal-distribuir">
+   341	        <div class="str-dialog" role="dialog" aria-modal="true" aria-labelledby="str-modal-dist-ttl">
+   342	            <div class="str-dialog-hd">
+   343	                <strong id="str-modal-dist-ttl">Distribuir parejas en grupos</strong>
+   344	                <button class="str-btn" data-close="#str-modal-distribuir">✕</button>
+   345	            </div>
+   346	            <div class="str-dialog-bd">
+   347	                <div class="str-field" style="margin-bottom:10px">
+   348	                    <label class="str-muted">Política</label>
+   349	                    <select id="str-pol" class="str-input">
+   350	                        <option value="random">Aleatorio (estable con semilla)</option>
+   351	                        <option value="roundrobin">Round-robin (equilibrado)</option>
+   352	                    </select>
+   353	                </div>
+   354	
+   355	                <div class="str-field" style="margin-bottom:10px">
+   356	                    <label class="str-muted">Tamaño objetivo por grupo</label>
+   357	                    <input id="str-target" class="str-input" type="number" min="2" step="1" value="4">
+   358	                </div>
+   359	
+   360	                <div class="str-field" style="margin-bottom:10px">
+   361	                    <label class="str-muted">Semilla <span class="str-muted">(opcional, para repetir el reparto aleatorio)</span></label>
+   362	                    <input id="str-seed" class="str-input" type="text" placeholder="Escribe un texto o número; si repites la misma semilla, obtendrás el mismo reparto">
+   363	                </div>
+   364	
+   365	                <div class="str-field" style="margin-bottom:10px">
+   366	                    <label class="str-muted"><input type="checkbox" id="str-relocate"> Recolocar parejas ya asignadas</label>
+   367	                    <p class="str-muted" style="margin:6px 0 0">
+   368	                        Desmarcado: solo reparte parejas libres. Marcado: puede mover parejas entre grupos para equilibrar.
+   369	                    </p>
+   370	                </div>
+   371	
+   372	                <div id="str-prev-meta" class="str-muted" style="margin:10px 0; display:none;"></div>
+   373	                <div class="str-prev-wrap" id="str-prev-wrap" style="display:none"></div>
+   374	            </div>
+   375	            <div class="str-dialog-ft">
+   376	                <button class="str-btn" data-close="#str-modal-distribuir">Cerrar</button>
+   377	                <button class="str-btn" id="str-btn-prev">Ver vista previa</button>
+   378	                <button class="str-btn str-btn--primary" id="str-btn-apply">Aplicar</button>
+   379	            </div>
+   380	        </div>
+   381	    </div>
+   382	
+   383	    <div class="str-modal" id="str-modal-confirm">
+   384	        <div class="str-dialog" role="dialog" aria-modal="true" aria-labelledby="str-modal-confirm-ttl">
+   385	            <div class="str-dialog-hd">
+   386	                <strong id="str-modal-confirm-ttl">Quitar pareja del grupo</strong>
+   387	                <button class="str-btn" data-close="#str-modal-confirm">✕</button>
+   388	            </div>
+   389	            <div class="str-dialog-bd">
+   390	                <p style="margin:0 0 8px">
+   391	                    ¿Seguro que quieres quitar <b id="str-conf-pair"></b> de <b id="str-conf-group"></b>?
+   392	                </p>
+   393	                <p class="str-muted" style="margin:6px 0 0">
+   394	                    Esta acción no elimina la pareja, solo la saca del grupo.
+   395	                </p>
+   396	                <input type="hidden" id="str-conf-gid" value="">
+   397	                <input type="hidden" id="str-conf-pid" value="">
+   398	            </div>
+   399	            <div class="str-dialog-ft">
+   400	                <button class="str-btn" data-close="#str-modal-confirm">Cancelar</button>
+   401	                <button class="str-btn str-btn-danger" id="str-conf-accept">Quitar</button>
+   402	            </div>
+   403	        </div>
+   404	    </div>
+   405	
+   406	    <script>
+   407	    (function(){
+   408	        const $wrap  = document.getElementById('str-grupos-wrapper');
+   409	        if (!$wrap) return;
+   410	        const AJAX  = $wrap.dataset.ajax;
+   411	        const NONCE = $wrap.dataset.nonce;
+   412	        const COMP  = $wrap.dataset.comp;
+   413	
+   414	        // Datos de nombres y estado
+   415	        const DATA = JSON.parse(document.getElementById('str-json-data').textContent || '{}');
+   416	        const GROUP_NAME = (gid) => DATA.groups?.[gid] || ('Grupo ' + gid);
+   417	        const PAIR_NAME  = (pid) => DATA.pairs?.[pid]  || ('Pareja #' + pid);
+   418	
+   419	        const open  = sel => document.querySelector(sel)?.classList.add('is-open');
+   420	        const close = sel => document.querySelector(sel)?.classList.remove('is-open');
+   421	
+   422	        // ===== Crear grupo =====
+   423	        document.getElementById('str-btn-crear-grupo')?.addEventListener('click', () => open('#str-modal-crear'));
+   424	        document.querySelectorAll('[data-close="#str-modal-crear"]').forEach(btn => btn.addEventListener('click', () => close('#str-modal-crear')));
+   425	
+   426	        document.getElementById('str-btn-crear-confirm')?.addEventListener('click', async () => {
+   427	            const nombre = document.getElementById('str-inp-nombre-grupo').value.trim();
+   428	            const fd = new FormData();
+   429	            fd.append('action','str_grupo_crear');
+   430	            fd.append('_ajax_nonce', NONCE);
+   431	            fd.append('competicion_id', COMP);
+   432	            fd.append('nombre', nombre);
+   433	            const r = await fetch(AJAX, {method:'POST', body:fd});
+   434	            let j; try{ j = await r.json(); }catch(e){}
+   435	            if (j && j.success){
+   436	                location.reload();
+   437	            } else {
+   438	                alert((j && j.data && j.data.message) ? j.data.message : 'No se pudo crear el grupo.');
+   439	            }
+   440	        });
+   441	
+   442	        // ===== Asignar pareja =====
+   443	        document.querySelectorAll('.js-add-pareja').forEach(btn => {
+   444	            btn.addEventListener('click', async () => {
+   445	                const gid = btn.dataset.grupoId;
+   446	                const select = btn.parentElement.querySelector('.js-select-pareja');
+   447	                const pid = select?.value;
+   448	                if (!pid){ alert('Selecciona una pareja libre.'); return; }
+   449	
+   450	                const fd = new FormData();
+   451	                fd.append('action','str_grupo_asignar_pareja');
+   452	                fd.append('_ajax_nonce', NONCE);
+   453	                fd.append('competicion_id', COMP);
+   454	                fd.append('grupo_id', gid);
+   455	                fd.append('pareja_id', pid);
+   456	
+   457	                const r = await fetch(AJAX,{method:'POST', body:fd});
+   458	                let j; try{ j = await r.json(); }catch(e){}
+   459	                if (j && j.success){ location.reload(); }
+   460	                else { alert((j && j.data && j.data.message) ? j.data.message : 'No se pudo asignar la pareja al grupo.'); }
+   461	            });
+   462	        });
+   463	
+   464	        // Atajo maestro → precarga selects
+   465	        const master = document.getElementById('str-select-libres');
+   466	        if (master){
+   467	            master.addEventListener('change', () => {
+   468	                document.querySelectorAll('.js-select-pareja').forEach(sel => { sel.value = master.value || ''; });
+   469	            });
+   470	        }
+   471	
+   472	        // ===== Quitar pareja (con modal propio) =====
+   473	        const modalConfirm = '#str-modal-confirm';
+   474	        const confPair  = document.getElementById('str-conf-pair');
+   475	        const confGroup = document.getElementById('str-conf-group');
+   476	        const confGid   = document.getElementById('str-conf-gid');
+   477	        const confPid   = document.getElementById('str-conf-pid');
+   478	
+   479	        // abrir modal con datos
+   480	        document.querySelectorAll('.js-quitar-pareja').forEach(btn => {
+   481	            btn.addEventListener('click', () => {
+   482	                const gid = btn.dataset.grupoId;
+   483	                const pid = btn.dataset.parejaId;
+   484	                confGid.value = gid;
+   485	                confPid.value = pid;
+   486	                confPair.textContent  = PAIR_NAME(parseInt(pid,10));
+   487	                confGroup.textContent = GROUP_NAME(parseInt(gid,10));
+   488	                open(modalConfirm);
+   489	            });
+   490	        });
+   491	
+   492	        // confirmar eliminación
+   493	        document.getElementById('str-conf-accept')?.addEventListener('click', async () => {
+   494	            const gid = confGid.value;
+   495	            const pid = confPid.value;
+   496	            if (!gid || !pid) return;
+   497	
+   498	            const fd = new FormData();
+   499	            fd.append('action','str_grupo_quitar_pareja');
+   500	            fd.append('_ajax_nonce', NONCE);
+   501	            fd.append('grupo_id', gid);
+   502	            fd.append('pareja_id', pid);
+   503	
+   504	            const r = await fetch(AJAX,{method:'POST', body:fd});
+   505	            let j; try{ j = await r.json(); }catch(e){}
+   506	            if (j && j.success){ location.reload(); }
+   507	            else { alert((j && j.data && j.data.message) ? j.data.message : 'No se pudo quitar la pareja.'); }
+   508	        });
+   509	
+   510	        // ===== Editar (Renombrar / Eliminar grupo) =====
+   511	        const modalRename   = '#str-modal-rename';
+   512	        const inpRename     = document.getElementById('str-inp-rename');
+   513	        const inpRenameId   = document.getElementById('str-inp-rename-grupo-id');
+   514	
+   515	        document.querySelectorAll('[data-close="#str-modal-rename"]').forEach(btn => btn.addEventListener('click', () => close(modalRename)));
+   516	
+   517	        document.querySelectorAll('.js-editar-grupo').forEach(btn => {
+   518	            btn.addEventListener('click', () => {
+   519	                const gid = btn.dataset.grupoId;
+   520	                const name = btn.dataset.grupoNombre || '';
+   521	                inpRename.value = name;
+   522	                inpRenameId.value = gid;
+   523	                open(modalRename);
+   524	                setTimeout(()=>{ inpRename.focus(); }, 50);
+   525	            });
+   526	        });
+   527	
+   528	        // Guardar nombre
+   529	        document.getElementById('str-btn-rename-confirm')?.addEventListener('click', async () => {
+   530	            const newName = (inpRename.value || '').trim();
+   531	            const gid     = (inpRenameId.value || '').trim();
+   532	            if (!gid) { alert('Grupo no válido'); return; }
+   533	            if (!newName) { alert('Escribe un nombre para el grupo.'); return; }
+   534	
+   535	            const fd = new FormData();
+   536	            fd.append('action','str_grupo_renombrar');
+   537	            fd.append('_ajax_nonce', NONCE);
+   538	            fd.append('competicion_id', COMP);
+   539	            fd.append('grupo_id', gid);
+   540	            fd.append('nombre', newName);
+   541	
+   542	            const r = await fetch(AJAX, {method:'POST', body: fd});
+   543	            let j; try{ j = await r.json(); }catch(e){}
+   544	            if (j && j.success){ location.reload(); }
+   545	            else { alert((j && j.data && j.data.msg) ? j.data.msg : (j && j.data && j.data.message) ? j.data.message : 'No se pudo renombrar el grupo.'); }
+   546	        });
+   547	
+   548	        // Eliminar grupo
+   549	        document.getElementById('str-btn-eliminar-grupo')?.addEventListener('click', async () => {
+   550	            const gid = (inpRenameId.value || '').trim();
+   551	            if (!gid) { alert('Grupo no válido'); return; }
+   552	            const seguro = confirm('Esta acción enviará el grupo a la papelera y desaparecerá de la lista. ¿Continuar?');
+   553	            if (!seguro) return;
+   554	
+   555	            const fd = new FormData();
+   556	            fd.append('action','str_grupo_eliminar');
+   557	            fd.append('_ajax_nonce', NONCE);
+   558	            fd.append('competicion_id', COMP);
+   559	            fd.append('grupo_id', gid);
+   560	
+   561	            const r = await fetch(AJAX, {method:'POST', body: fd});
+   562	            let j; try{ j = await r.json(); }catch(e){}
+   563	            if (j && j.success){ location.reload(); }
+   564	            else { alert((j && j.data && j.data.message) ? j.data.message : 'No se pudo eliminar el grupo.'); }
+   565	        });
+   566	
+   567	        // ===== Distribuir parejas (igual que antes) =====
+   568	        const modalDist = '#str-modal-distribuir';
+   569	        const polSel    = document.getElementById('str-pol');
+   570	        const targetInp = document.getElementById('str-target');
+   571	        const seedInp   = document.getElementById('str-seed');
+   572	        const relocate  = document.getElementById('str-relocate');
+   573	        const prevWrap  = document.getElementById('str-prev-wrap');
+   574	        const prevMeta  = document.getElementById('str-prev-meta');
+   575	
+   576	        document.getElementById('str-btn-distribuir')?.addEventListener('click', () => {
+   577	            open(modalDist);
+   578	            prevWrap.style.display = 'none';
+   579	            prevMeta.style.display = 'none';
+   580	            prevWrap.innerHTML = '';
+   581	        });
+   582	        document.querySelectorAll('[data-close="#str-modal-distribuir"]').forEach(btn =>
+   583	            btn.addEventListener('click', () => close(modalDist))
+   584	        );
+   585	
+   586	        function seededRandom(seed){
+   587	            let x = 0;
+   588	            for (let i=0;i<seed.length;i++) x = (x ^ seed.charCodeAt(i)) >>> 0;
+   589	            if (x===0) x = 0x9e3779b9;
+   590	            return function(){
+   591	                x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+   592	                return ((x>>>0) / 4294967296);
+   593	            };
+   594	        }
+   595	        function shuffle(arr, rnd){
+   596	            const a = arr.slice();
+   597	            for(let i=a.length-1;i>0;i--){
+   598	                const j = Math.floor(rnd()* (i+1));
+   599	                [a[i],a[j]] = [a[j],a[i]];
+   600	            }
+   601	            return a;
+   602	        }
+   603	
+   604	        function buildPreview(){
+   605	            const target = Math.max(2, parseInt(targetInp.value||'4',10));
+   606	            const policy = polSel.value;
+   607	            const seed   = seedInp.value.trim() || (new Date().toISOString().slice(0,10));
+   608	            const rnd    = seededRandom(seed);
+   609	
+   610	            const groups = Object.keys(DATA.groupsPairs || {}).map(gid => parseInt(gid,10));
+   611	            const current = {};
+   612	            groups.forEach(gid => current[gid] = (DATA.groupsPairs[gid]||[]).slice());
+   613	
+   614	            const free = (DATA.freePairs||[]).slice();
+   615	
+   616	            const plan = {};
+   617	            groups.forEach(gid => plan[gid] = { before: current[gid].slice(), after: current[gid].slice() });
+   618	
+   619	            let candidates = [];
+   620	            if (relocate.checked){
+   621	                const all = new Set();
+   622	                free.forEach(p=>all.add(p));
+   623	                groups.forEach(gid => (current[gid]||[]).forEach(p=>all.add(p)));
+   624	                candidates = Array.from(all);
+   625	            } else {
+   626	                candidates = free.slice();
+   627	            }
+   628	            candidates = shuffle(candidates, rnd);
+   629	
+   630	            if (policy === 'roundrobin'){
+   631	                let idx = 0;
+   632	                while (candidates.length){
+   633	                    const gid = groups[idx % groups.length];
+   634	                    if (plan[gid].after.length < target){
+   635	                        const p = candidates.shift();
+   636	                        if (!plan[gid].after.includes(p)){
+   637	                            if (relocate.checked){
+   638	                                groups.forEach(g => {
+   639	                                    if (g!==gid){
+   640	                                        const i = plan[g].after.indexOf(p);
+   641	                                        if (i>=0) plan[g].after.splice(i,1);
+   642	                                    }
+   643	                                });
+   644	                            }
+   645	                            plan[gid].after.push(p);
+   646	                        }
+   647	                    }
+   648	                    idx++;
+   649	                    if (groups.every(g => plan[g].after.length >= target)) break;
+   650	                }
+   651	            } else {
+   652	                groups.forEach(gid => {
+   653	                    while (plan[gid].after.length < target && candidates.length){
+   654	                        const p = candidates.shift();
+   655	                        if (relocate.checked){
+   656	                            groups.forEach(g => {
+   657	                                if (g!==gid){
+   658	                                    const i = plan[g].after.indexOf(p);
+   659	                                    if (i>=0) plan[g].after.splice(i,1);
+   660	                                }
+   661	                            });
+   662	                        }
+   663	                        if (!plan[gid].after.includes(p)){
+   664	                            plan[gid].after.push(p);
+   665	                        }
+   666	                    }
+   667	                });
+   668	            }
+   669	
+   670	            prevMeta.textContent = `Grupos: ${groups.length} · Política: ${policy} · Tamaño objetivo: ${target}`;
+   671	            prevMeta.style.display = 'block';
+   672	
+   673	            prevWrap.innerHTML = '';
+   674	            groups.forEach(gid => {
+   675	                const card = document.createElement('div');
+   676	                card.className = 'str-prev-card';
+   677	                card.innerHTML = `
+   678	                    <div class="str-prev-head">${GROUP_NAME(gid)}</div>
+   679	                    <div class="str-prev-body">
+   680	                        <div>
+   681	                            <div class="str-colcap">Antes</div>
+   682	                            <div class="str-chips"></div>
+   683	                        </div>
+   684	                        <div>
+   685	                            <div class="str-colcap">Después</div>
+   686	                            <div class="str-chips"></div>
+   687	                        </div>
+   688	                    </div>
+   689	                `;
+   690	                const [colBefore, colAfter] = card.querySelectorAll('.str-chips');
+   691	                (plan[gid].before || []).forEach(pid => {
+   692	                    const c = document.createElement('span');
+   693	                    c.className = 'str-chip';
+   694	                    c.textContent = PAIR_NAME(pid);
+   695	                    colBefore.appendChild(c);
+   696	                });
+   697	                (plan[gid].after || []).forEach(pid => {
+   698	                    const c = document.createElement('span');
+   699	                    c.className = 'str-chip';
+   700	                    c.textContent = PAIR_NAME(pid);
+   701	                    colAfter.appendChild(c);
+   702	                });
+   703	                prevWrap.appendChild(card);
+   704	            });
+   705	            prevWrap.style.display = 'block';
+   706	
+   707	            return plan;
+   708	        }
+   709	
+   710	        let lastPlan = null;
+   711	        document.getElementById('str-btn-prev')?.addEventListener('click', () => {
+   712	            lastPlan = buildPreview();
+   713	        });
+   714	
+   715	        document.getElementById('str-btn-apply')?.addEventListener('click', async () => {
+   716	            if (!lastPlan) lastPlan = buildPreview();
+   717	            const moves = [];
+   718	            Object.keys(lastPlan).forEach(gid => {
+   719	                const before = lastPlan[gid].before || [];
+   720	                const after  = lastPlan[gid].after  || [];
+   721	                const add    = after.filter(p => !before.includes(p));
+   722	                const remove = before.filter(p => !after.includes(p));
+   723	                moves.push({gid: parseInt(gid,10), add, remove});
+   724	            });
+   725	
+   726	            for (const m of moves){
+   727	                for (const pid of m.remove){
+   728	                    const fd = new FormData();
+   729	                    fd.append('action','str_grupo_quitar_pareja');
+   730	                    fd.append('_ajax_nonce', NONCE);
+   731	                    fd.append('grupo_id', m.gid);
+   732	                    fd.append('pareja_id', pid);
+   733	                    await fetch(AJAX,{method:'POST', body:fd});
+   734	                }
+   735	                for (const pid of m.add){
+   736	                    const fd = new FormData();
+   737	                    fd.append('action','str_grupo_asignar_pareja');
+   738	                    fd.append('_ajax_nonce', NONCE);
+   739	                    fd.append('competicion_id', COMP);
+   740	                    fd.append('grupo_id', m.gid);
+   741	                    fd.append('pareja_id', pid);
+   742	                    await fetch(AJAX,{method:'POST', body:fd});
+   743	                }
+   744	            }
+   745	            location.reload();
+   746	        });
+   747	
+   748	        // Cerrar modales por overlay y ESC
+   749	        document.querySelectorAll('.str-modal').forEach(m => {
+   750	            m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('is-open'); });
+   751	        });
+   752	        document.addEventListener('keydown', (e) => {
+   753	            if (e.key === 'Escape'){
+   754	                document.querySelectorAll('.str-modal.is-open').forEach(m => m.classList.remove('is-open'));
+   755	            }
+   756	        });
+   757	    })();
+   758	    </script>
+   759	
+   760	    <?php
+   761	    return ob_get_clean();
+   762	}
+   763	
+   764	endif; // function_exists

@@ -1,0 +1,36 @@
+     1	<?php
+     2	// AJAX: Cargar estadísticas del jugador para su perfil
+     3	// Antiguo: ajax-cargar-estadisticas-jugador.php
+     4	// Este endpoint servirá para devolver estadísticas de partidos según jugador y deporte. 
+     5	// Por ahora es un esqueleto base, listo para conectar cuando esté implementada la lógica de partidos.
+     6	
+     7	add_action('wp_ajax_str_cargar_estadisticas_jugador', 'str_cargar_estadisticas_jugador');
+     8	add_action('wp_ajax_nopriv_str_cargar_estadisticas_jugador', 'str_cargar_estadisticas_jugador');
+     9	
+    10	function str_cargar_estadisticas_jugador() {
+    11	    // Validar parámetros recibidos (ID de jugador y deporte)
+    12	    $jugador_id = isset($_POST['jugador_id']) ? intval($_POST['jugador_id']) : 0;
+    13	    $deporte    = isset($_POST['deporte']) ? sanitize_text_field($_POST['deporte']) : '';
+    14	
+    15	    // TODO: Añadir aquí la lógica real para consultar partidos y calcular estadísticas:
+    16	    // partidos jugados, ganados, perdidos, racha, %...
+    17	    // Usar el $jugador_id y el $deporte para filtrar los partidos.
+    18	
+    19	    // Devolver un ejemplo de datos simulados (por ahora):
+    20	    $response = [
+    21	        'jugados'         => 0,
+    22	        'ganados'         => 0,
+    23	        'ganados_pct'     => 0,
+    24	        'perdidos'        => 0,
+    25	        'perdidos_pct'    => 0,
+    26	        'racha_ganados'   => 0,
+    27	        'racha_ganados_pct' => 0,
+    28	        'racha_perdidos'  => 0,
+    29	        'racha_perdidos_pct' => 0,
+    30	    ];
+    31	
+    32	    wp_send_json_success($response);
+    33	    exit;
+    34	}
+    35	
+    36	// NOTA: Cuando la sección de partidos esté lista, aquí irá toda la consulta real.

@@ -1,0 +1,28 @@
+     1	<?php
+     2	// Shortcode: [ajustes_cliente]
+     3	function str_shortcode_ajustes_cliente() {
+     4	    if (!is_user_logged_in() || (!current_user_can('cliente') && !current_user_can('administrator'))) {
+     5	        return '<p>Acceso restringido. Debes iniciar sesión como cliente.</p>';
+     6	    }
+     7	
+     8	    ob_start();
+     9	
+    10	    $current_user = wp_get_current_user();
+    11	    ?>
+    12	
+    13	    <div class="str-dashboard-container">
+    14	        <h2 class="str-bienvenida">Ajustes de cuenta</h2>
+    15	
+    16	        <ul style="list-style: none; padding: 0; font-size: 16px;">
+    17	            <li><strong>Usuario:</strong> <?php echo esc_html($current_user->user_login); ?></li>
+    18	            <li><strong>Email:</strong> <?php echo esc_html($current_user->user_email); ?></li>
+    19	            <li><strong>Nombre mostrado:</strong> <?php echo esc_html($current_user->display_name); ?></li>
+    20	        </ul>
+    21	
+    22	        <p>En futuras versiones podrás cambiar el logo del torneo, personalizar el texto de los correos, y ajustar tu panel.</p>
+    23	    </div>
+    24	
+    25	    <?php
+    26	    return ob_get_clean();
+    27	}
+    28	add_shortcode('ajustes_cliente', 'str_shortcode_ajustes_cliente');

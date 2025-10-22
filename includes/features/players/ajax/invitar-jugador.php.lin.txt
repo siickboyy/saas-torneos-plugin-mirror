@@ -1,0 +1,154 @@
+     1	<?php
+     2	// Antiguo /includes/ajax/ajax-invitar-jugador.php
+     3	
+     4	// Hook para usuarios logueados (administrador o cliente)
+     5	add_action('wp_ajax_str_invitar_jugador', 'str_ajax_invitar_jugador');
+     6	
+     7	function str_ajax_invitar_jugador() {
+     8	    if ( !current_user_can('administrator') && !current_user_can('cliente') ) {
+     9	        wp_send_json_error(['mensaje' => 'No tienes permisos para invitar jugadores.']);
+    10	        exit;
+    11	    }
+    12	
+    13	    // Recoger y sanear datos del POST
+    14	    $nombre    = isset($_POST['nombre'])    ? sanitize_text_field($_POST['nombre'])     : '';
+    15	    $apellidos = isset($_POST['apellidos']) ? sanitize_text_field($_POST['apellidos'])  : '';
+    16	    $email     = isset($_POST['email'])     ? sanitize_email($_POST['email'])           : '';
+    17	    $telefono  = isset($_POST['telefono'])  ? sanitize_text_field($_POST['telefono'])   : '';
+    18	    $asunto    = isset($_POST['asunto'])    ? sanitize_text_field($_POST['asunto'])     : 'Invitación a un torneo';
+    19	    $mensaje   = isset($_POST['mensaje'])   ? sanitize_textarea_field($_POST['mensaje']): '';
+    20	    $torneo_id = isset($_POST['torneo_id']) ? intval($_POST['torneo_id'])               : 0;
+    21	
+    22	    // Validación básica
+    23	    if (!$nombre || !$apellidos || !$email || !$torneo_id || !$asunto) {
+    24	        wp_send_json_error(['mensaje' => 'Faltan datos obligatorios.']);
+    25	        exit;
+    26	    }
+    27	
+    28	    // Comprobamos si el email ya existe como usuario
+    29	    $user = get_user_by('email', $email);
+    30	
+    31	    if ($user) {
+    32	        $cpt_query = new WP_Query([
+    33	            'post_type'  => 'jugador_deportes',
+    34	            'meta_query' => [
+    35	                [
+    36	                    'key'   => 'user_id',
+    37	                    'value' => $user->ID,
+    38	                    'compare' => '='
+    39	                ]
+    40	            ],
+    41	            'posts_per_page' => 1,
+    42	        ]);
+    43	        if ($cpt_query->have_posts()) {
+    44	            $jugador_post = $cpt_query->posts[0];
+    45	            $torneos = get_field('torneos_asociados', $jugador_post->ID) ?: [];
+    46	            if (!in_array($torneo_id, $torneos)) {
+    47	                $torneos[] = $torneo_id;
+    48	                update_field('torneos_asociados', $torneos, $jugador_post->ID);
+    49	            }
+    50	            wp_send_json_success(['mensaje' => 'El jugador ya está registrado. Se ha añadido al torneo.']);
+    51	            exit;
+    52	        }
+    53	        // Si existe usuario pero no CPT, creamos el CPT y lo vinculamos
+    54	        $jugador_post_id = wp_insert_post([
+    55	            'post_type'   => 'jugador_deportes',
+    56	            'post_title'  => $nombre . ' ' . $apellidos,
+    57	            'post_status' => 'publish'
+    58	        ]);
+    59	        update_field('nombre', $nombre, $jugador_post_id);
+    60	        update_field('apellido', $apellidos, $jugador_post_id);
+    61	        update_field('email', $email, $jugador_post_id);
+    62	        update_field('telefono', $telefono, $jugador_post_id);
+    63	        update_field('user_id', $user->ID, $jugador_post_id);
+    64	        update_field('torneos_asociados', [$torneo_id], $jugador_post_id);
+    65	        update_field('estado_invitacion', 'aceptado', $jugador_post_id);
+    66	        wp_send_json_success(['mensaje' => 'Usuario ya registrado. CPT jugador creado y añadido al torneo.']);
+    67	        exit;
+    68	    }
+    69	
+    70	    // Buscar si existe ya como CPT (sin usuario asociado)
+    71	    $args = [
+    72	        'post_type'  => 'jugador_deportes',
+    73	        'meta_query' => [
+    74	            [
+    75	                'key'     => 'email',
+    76	                'value'   => $email,
+    77	                'compare' => '='
+    78	            ]
+    79	        ],
+    80	        'posts_per_page' => 1,
+    81	    ];
+    82	    $query = new WP_Query($args);
+    83	
+    84	    if ($query->have_posts()) {
+    85	        $jugador_post = $query->posts[0];
+    86	
+    87	        // 1. --- Genera SIEMPRE un nuevo token único para la invitación de este torneo ---
+    88	        $token = wp_generate_password(24, false, false);
+    89	        update_field('token_invitacion', $token, $jugador_post->ID);
+    90	        update_field('fecha_envio_invitacion', current_time('Y-m-d H:i:s'), $jugador_post->ID);
+    91	
+    92	        // Añadir torneo si no está ya
+    93	        $torneos = get_field('torneos_asociados', $jugador_post->ID) ?: [];
+    94	        if (!in_array($torneo_id, $torneos)) {
+    95	            $torneos[] = $torneo_id;
+    96	            update_field('torneos_asociados', $torneos, $jugador_post->ID);
+    97	        }
+    98	
+    99	        // --- Enlace único con parámetros: token, id y torneo
+   100	        $enlace_registro = site_url('/registro-jugador/?token=' . urlencode($token) . '&id=' . $jugador_post->ID . '&torneo=' . $torneo_id);
+   101	
+   102	        $cuerpo_email = $mensaje . "\n\n";
+   103	        $cuerpo_email .= "Haz clic aquí para unirte al torneo: " . $enlace_registro . "\n";
+   104	        $cuerpo_email .= "\nSi no reconoces este mensaje, ignóralo.";
+   105	
+   106	        $headers = ['Content-Type: text/plain; charset=UTF-8'];
+   107	        $mail_ok = wp_mail($email, $asunto, $cuerpo_email, $headers);
+   108	
+   109	        if ($mail_ok) {
+   110	            update_field('estado_invitacion', 'enviado', $jugador_post->ID);
+   111	            wp_send_json_success(['mensaje' => 'El jugador ya existía como CPT. Invitación de registro enviada por email.']);
+   112	        } else {
+   113	            update_field('estado_invitacion', 'fallo', $jugador_post->ID);
+   114	            wp_send_json_error(['mensaje' => 'No se pudo enviar el email de invitación. Comprueba el servidor de correo.']);
+   115	        }
+   116	        exit;
+   117	    }
+   118	
+   119	    // Si NO existe, creamos el CPT jugador
+   120	    $jugador_post_id = wp_insert_post([
+   121	        'post_type'   => 'jugador_deportes',
+   122	        'post_title'  => $nombre . ' ' . $apellidos,
+   123	        'post_status' => 'publish'
+   124	    ]);
+   125	    update_field('nombre', $nombre, $jugador_post_id);
+   126	    update_field('apellido', $apellidos, $jugador_post_id);
+   127	    update_field('email', $email, $jugador_post_id);
+   128	    update_field('telefono', $telefono, $jugador_post_id);
+   129	    update_field('torneos_asociados', [$torneo_id], $jugador_post_id);
+   130	
+   131	    // --- Token, estado, fecha ---
+   132	    $token = wp_generate_password(24, false, false);
+   133	    update_field('token_invitacion', $token, $jugador_post_id);
+   134	    update_field('fecha_envio_invitacion', current_time('Y-m-d H:i:s'), $jugador_post_id);
+   135	
+   136	    // --- Enlace único con parámetros: token, id y torneo
+   137	    $enlace_registro = site_url('/registro-jugador/?token=' . urlencode($token) . '&id=' . $jugador_post_id . '&torneo=' . $torneo_id);
+   138	
+   139	    $cuerpo_email = $mensaje . "\n\n";
+   140	    $cuerpo_email .= "Haz clic aquí para unirte al torneo: " . $enlace_registro . "\n";
+   141	    $cuerpo_email .= "\nSi no reconoces este mensaje, ignóralo.";
+   142	
+   143	    $headers = ['Content-Type: text/plain; charset=UTF-8'];
+   144	    $mail_ok = wp_mail($email, $asunto, $cuerpo_email, $headers);
+   145	
+   146	    if ($mail_ok) {
+   147	        update_field('estado_invitacion', 'enviado', $jugador_post_id);
+   148	        wp_send_json_success(['mensaje' => 'Jugador añadido y email de invitación enviado.']);
+   149	    } else {
+   150	        update_field('estado_invitacion', 'fallo', $jugador_post_id);
+   151	        wp_send_json_error(['mensaje' => 'No se pudo enviar el email de invitación. Comprueba el servidor de correo.']);
+   152	    }
+   153	    exit;
+   154	}

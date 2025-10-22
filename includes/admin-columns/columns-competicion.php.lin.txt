@@ -1,0 +1,178 @@
+     1	<?php
+     2	/**
+     3	 * Personalización de columnas y filtros para el CPT "competicion"
+     4	 * Ruta: /saas-torneos-de-raqueta/includes/admin-columns/columns-competicion.php
+     5	 */
+     6	
+     7	// SOLO en admin y para el CPT correcto
+     8	add_action('admin_init', function() {
+     9	    $screen = get_current_screen();
+    10	    if (is_admin() && isset($_GET['post_type']) && $_GET['post_type'] === 'competicion') {
+    11	        // Hooks de columnas y filtros
+    12	        add_filter('manage_competicion_posts_columns', 'str_add_columns_competicion');
+    13	        add_action('manage_competicion_posts_custom_column', 'str_show_columns_competicion', 10, 2);
+    14	        add_filter('manage_edit-competicion_sortable_columns', 'str_sortable_columns_competicion');
+    15	        add_action('restrict_manage_posts', 'str_filter_columns_competicion');
+    16	        add_filter('parse_query', 'str_columns_competicion_filter_query');
+    17	    }
+    18	});
+    19	
+    20	/**
+    21	 * Añade las nuevas columnas al listado del CPT competición.
+    22	 * Ahora el Título va primero y el ID es la segunda columna.
+    23	 */
+    24	function str_add_columns_competicion($columns) {
+    25	    $new_columns = array();
+    26	
+    27	    // Título como primera columna
+    28	    $new_columns['title'] = __('Título');
+    29	    // ID como segunda columna
+    30	    $new_columns['id'] = 'ID';
+    31	    // El resto de columnas personalizadas
+    32	    $new_columns['usuario_creador'] = __('Usuario creador');
+    33	    $new_columns['n_jugadores'] = __('Nº jugadores');
+    34	    $new_columns['tipo_competicion'] = __('Tipo competición');
+    35	    $new_columns['deporte'] = __('Deporte');
+    36	    // Fecha siempre al final
+    37	    $new_columns['date'] = $columns['date'];
+    38	    return $new_columns;
+    39	}
+    40	
+    41	/**
+    42	 * Muestra el contenido de cada columna personalizada.
+    43	 */
+    44	function str_show_columns_competicion($column, $post_id) {
+    45	    switch ($column) {
+    46	        case 'id':
+    47	            echo esc_html($post_id);
+    48	            break;
+    49	        case 'usuario_creador':
+    50	            $user_id = get_post_field('post_author', $post_id);
+    51	            $user = get_userdata($user_id);
+    52	            echo $user ? esc_html($user->display_name) : '-';
+    53	            break;
+    54	        case 'n_jugadores':
+    55	            $n_jugadores = get_field('n_jugadores', $post_id);
+    56	            echo $n_jugadores ? esc_html($n_jugadores) : '-';
+    57	            break;
+    58	        case 'tipo_competicion':
+    59	            $tipo = get_field('tipo_competicion', $post_id);
+    60	            echo $tipo ? esc_html($tipo) : '-';
+    61	            break;
+    62	        case 'deporte':
+    63	            $deporte = get_field('deporte', $post_id);
+    64	            echo $deporte ? esc_html($deporte) : '-';
+    65	            break;
+    66	    }
+    67	}
+    68	
+    69	/**
+    70	 * Hace las columnas ordenables si lo necesitas (opcional, aquí solo para ID y título).
+    71	 */
+    72	function str_sortable_columns_competicion($columns) {
+    73	    $columns['id'] = 'ID';
+    74	    $columns['usuario_creador'] = 'author';
+    75	    return $columns;
+    76	}
+    77	
+    78	/**
+    79	 * Añade los filtros arriba de la tabla de competiciones.
+    80	 */
+    81	function str_filter_columns_competicion() {
+    82	    global $typenow;
+    83	    if ($typenow !== 'competicion') return;
+    84	
+    85	    // Filtro por usuario creador
+    86	    wp_dropdown_users(array(
+    87	        'show_option_all' => 'Todos los usuarios',
+    88	        'name' => 'admin_competicion_user',
+    89	        'selected' => isset($_GET['admin_competicion_user']) ? intval($_GET['admin_competicion_user']) : 0,
+    90	        'include_selected' => true,
+    91	        'who' => 'authors'
+    92	    ));
+    93	
+    94	    // Filtro por nº jugadores
+    95	    $valores = array(4, 8, 16, 32, 64, 128, 256);
+    96	    $valor_actual = isset($_GET['admin_n_jugadores']) ? intval($_GET['admin_n_jugadores']) : '';
+    97	    echo '<select name="admin_n_jugadores"><option value="">Todos los jugadores</option>';
+    98	    foreach ($valores as $valor) {
+    99	        printf(
+   100	            '<option value="%d"%s>%d</option>',
+   101	            $valor,
+   102	            $valor == $valor_actual ? ' selected="selected"' : '',
+   103	            $valor
+   104	        );
+   105	    }
+   106	    echo '</select>';
+   107	
+   108	    // Filtro por tipo de competición
+   109	    $tipos = array('torneo' => 'Torneo', 'ranking' => 'Ranking');
+   110	    $tipo_actual = isset($_GET['admin_tipo_competicion']) ? $_GET['admin_tipo_competicion'] : '';
+   111	    echo '<select name="admin_tipo_competicion"><option value="">Todos los tipos</option>';
+   112	    foreach ($tipos as $key => $label) {
+   113	        printf(
+   114	            '<option value="%s"%s>%s</option>',
+   115	            esc_attr($key),
+   116	            $key === $tipo_actual ? ' selected="selected"' : '',
+   117	            esc_html($label)
+   118	        );
+   119	    }
+   120	    echo '</select>';
+   121	
+   122	    // Filtro por deporte
+   123	    $deportes = array('padel' => 'Pádel', 'tenis' => 'Tenis', 'pickleball' => 'Pickleball', 'tenis_playa' => 'Tenis Playa');
+   124	    $deporte_actual = isset($_GET['admin_deporte']) ? $_GET['admin_deporte'] : '';
+   125	    echo '<select name="admin_deporte"><option value="">Todos los deportes</option>';
+   126	    foreach ($deportes as $key => $label) {
+   127	        printf(
+   128	            '<option value="%s"%s>%s</option>',
+   129	            esc_attr($key),
+   130	            $key === $deporte_actual ? ' selected="selected"' : '',
+   131	            esc_html($label)
+   132	        );
+   133	    }
+   134	    echo '</select>';
+   135	}
+   136	
+   137	/**
+   138	 * Lógica de filtrado según los dropdowns.
+   139	 */
+   140	function str_columns_competicion_filter_query($query) {
+   141	    global $pagenow, $typenow;
+   142	    if ($pagenow === 'edit.php' && $typenow === 'competicion' && $query->is_main_query()) {
+   143	        // Filtrar por usuario
+   144	        if (!empty($_GET['admin_competicion_user'])) {
+   145	            $query->set('author', intval($_GET['admin_competicion_user']));
+   146	        }
+   147	        // Filtrar por nº jugadores (ACF)
+   148	        if (!empty($_GET['admin_n_jugadores'])) {
+   149	            $meta_query = $query->get('meta_query', array());
+   150	            $meta_query[] = array(
+   151	                'key' => 'n_jugadores',
+   152	                'value' => intval($_GET['admin_n_jugadores']),
+   153	                'compare' => '='
+   154	            );
+   155	            $query->set('meta_query', $meta_query);
+   156	        }
+   157	        // Filtrar por tipo de competición (ACF)
+   158	        if (!empty($_GET['admin_tipo_competicion'])) {
+   159	            $meta_query = $query->get('meta_query', array());
+   160	            $meta_query[] = array(
+   161	                'key' => 'tipo_competicion',
+   162	                'value' => sanitize_text_field($_GET['admin_tipo_competicion']),
+   163	                'compare' => '='
+   164	            );
+   165	            $query->set('meta_query', $meta_query);
+   166	        }
+   167	        // Filtrar por deporte (ACF)
+   168	        if (!empty($_GET['admin_deporte'])) {
+   169	            $meta_query = $query->get('meta_query', array());
+   170	            $meta_query[] = array(
+   171	                'key' => 'deporte',
+   172	                'value' => sanitize_text_field($_GET['admin_deporte']),
+   173	                'compare' => '='
+   174	            );
+   175	            $query->set('meta_query', $meta_query);
+   176	        }
+   177	    }
+   178	}

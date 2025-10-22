@@ -1,0 +1,122 @@
+     1	<?php
+     2	// Shortcode: [mis_jugadores]
+     3	function str_shortcode_mis_jugadores() {
+     4	    if (!is_user_logged_in() || (!current_user_can('cliente') && !current_user_can('administrator'))) {
+     5	        return '<p>Acceso restringido. Debes iniciar sesión como cliente.</p>';
+     6	    }
+     7	
+     8	    ob_start();
+     9	
+    10	    $current_user_id = get_current_user_id();
+    11	
+    12	    $args = [
+    13	        'post_type'      => 'jugador_deportes',
+    14	        'post_status'    => 'publish',
+    15	        'author'         => $current_user_id,
+    16	        'posts_per_page' => -1,
+    17	        'orderby'        => 'title',
+    18	        'order'          => 'ASC'
+    19	    ];
+    20	
+    21	    $jugadores = new WP_Query($args);
+    22	    ?>
+    23	
+    24	    <div class="str-dashboard-container">
+    25	        <h2 class="str-bienvenida">Mis jugadores</h2>
+    26	        <p class="str-tabla-intro">Aquí puedes consultar y gestionar todos los jugadores que tienes registrados en tus competiciones. Usa el buscador o haz clic en el encabezado para ordenar la lista por nombre.
+    27	        </p>
+    28	
+    29	        <?php if ($jugadores->have_posts()): ?>
+    30	            <div class="str-tabla-header-controls">
+    31	                <div class="str-table-search-wrapper">
+    32	                    <input type="text" id="str-table-search" class="str-table-search" placeholder="Buscar jugador..." autocomplete="off">
+    33	                </div>
+    34	            </div>
+    35	            <div class="str-tabla-wrapper">
+    36	                <table class="str-tabla" id="str-tabla-jugadores">
+    37	                    <thead>
+    38	                        <tr>
+    39	                            <th data-sort="nombre" class="str-table-sortable">
+    40	                                Nombre
+    41	                                <span class="str-table-sort-icon" data-dir="desc"><i class="fas fa-sort"></i></span>
+    42	                            </th>
+    43	                            <th>Email</th>
+    44	                            <th>Teléfono</th>
+    45	                            <th>Perfil</th>
+    46	                        </tr>
+    47	                    </thead>
+    48	                    <tbody>
+    49	                        <?php while ($jugadores->have_posts()): $jugadores->the_post();
+    50	                            $email    = get_field('email');
+    51	                            $telefono = get_field('telefono');
+    52	                            $perfil_url = get_permalink(); ?>
+    53	                            <tr>
+    54	                                <td><?php the_title(); ?></td>
+    55	                                <td><?php echo esc_html($email); ?></td>
+    56	                                <td><?php echo esc_html($telefono); ?></td>
+    57	                                <td>
+    58	                                    <a href="<?php echo esc_url($perfil_url); ?>" class="str-dashboard-btn str-btn-ver">Ver perfil</a>
+    59	                                </td>
+    60	                            </tr>
+    61	                        <?php endwhile; ?>
+    62	                    </tbody>
+    63	                </table>
+    64	            </div>
+    65	        <?php else: ?>
+    66	            <p>No tienes jugadores registrados aún.</p>
+    67	        <?php endif; ?>
+    68	
+    69	        <?php wp_reset_postdata(); ?>
+    70	    </div>
+    71	
+    72	    <script>
+    73	    // === Filtro en vivo por nombre de jugador ===
+    74	    document.addEventListener('DOMContentLoaded', function() {
+    75	        var input = document.getElementById('str-table-search');
+    76	        var table = document.getElementById('str-tabla-jugadores');
+    77	        if (!table) return;
+    78	        // FILTRO EN VIVO
+    79	        if(input){
+    80	            input.addEventListener('keyup', function() {
+    81	                var filter = input.value.toLowerCase();
+    82	                var trs = table.querySelectorAll("tbody tr");
+    83	                trs.forEach(function(row) {
+    84	                    var cell = row.querySelector("td");
+    85	                    if (!cell) return;
+    86	                    row.style.display = cell.textContent.toLowerCase().indexOf(filter) > -1 ? "" : "none";
+    87	                });
+    88	            });
+    89	        }
+    90	
+    91	        // ORDENACION SOLO EN NOMBRE
+    92	        let sortDirection = {};
+    93	        var header = table.querySelector('th.str-table-sortable');
+    94	        if (header) {
+    95	            header.addEventListener('click', function() {
+    96	                var rows = Array.from(table.tBodies[0].rows);
+    97	                var colIdx = 0; // Nombre está en la primera columna
+    98	                var dataType = 'nombre';
+    99	                sortDirection[dataType] = !sortDirection[dataType];
+   100	                var direction = sortDirection[dataType] ? 1 : -1;
+   101	
+   102	                // Cambia el icono de la cabecera
+   103	                var icon = header.querySelector('.str-table-sort-icon i');
+   104	                if (icon) {
+   105	                    icon.className = direction === 1 ? "fas fa-sort-up" : "fas fa-sort-down";
+   106	                }
+   107	
+   108	                rows.sort(function(a, b) {
+   109	                    var cellA = a.cells[colIdx].textContent.trim().toLowerCase();
+   110	                    var cellB = b.cells[colIdx].textContent.trim().toLowerCase();
+   111	                    return direction * cellA.localeCompare(cellB);
+   112	                });
+   113	                rows.forEach(function(row) { table.tBodies[0].appendChild(row); });
+   114	            });
+   115	        }
+   116	    });
+   117	    </script>
+   118	
+   119	    <?php
+   120	    return ob_get_clean();
+   121	}
+   122	add_shortcode('mis_jugadores', 'str_shortcode_mis_jugadores');

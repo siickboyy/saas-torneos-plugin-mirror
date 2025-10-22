@@ -1,0 +1,37 @@
+     1	<?php
+     2	// CPT: Partidos jugados dentro de competiciones
+     3	
+     4	function str_register_cpt_partidos() {
+     5	    $labels = [
+     6	        'name'               => __('Partidos', 'saas-torneos'),
+     7	        'singular_name'      => __('Partido', 'saas-torneos'),
+     8	        'add_new'            => __('Añadir nuevo', 'saas-torneos'),
+     9	        'add_new_item'       => __('Añadir nuevo partido', 'saas-torneos'),
+    10	        'edit_item'          => __('Editar partido', 'saas-torneos'),
+    11	        'new_item'           => __('Nuevo partido', 'saas-torneos'),
+    12	        'all_items'          => __('Todos los partidos', 'saas-torneos'),
+    13	        'view_item'          => __('Ver partido', 'saas-torneos'),
+    14	        'search_items'       => __('Buscar partidos', 'saas-torneos'),
+    15	        'not_found'          => __('No se encontraron partidos', 'saas-torneos'),
+    16	        'not_found_in_trash' => __('No hay partidos en la papelera', 'saas-torneos'),
+    17	        'menu_name'          => __('Partidos', 'saas-torneos')
+    18	    ];
+    19	
+    20	    $args = [
+    21	        'labels'             => $labels,
+    22	        'public'             => false,
+    23	        'show_ui'            => true,
+    24	        'show_in_menu'       => true,
+    25	        'capability_type'    => 'post',
+    26	        'hierarchical'       => false,
+    27	        'supports'           => ['title'],
+    28	        'menu_position'      => 23,
+    29	        'menu_icon'          => 'dashicons-controls-play', // Icono tipo "play"
+    30	        'has_archive'        => false,
+    31	        'rewrite'            => false,
+    32	        'show_in_rest'       => false
+    33	    ];
+    34	
+    35	    register_post_type( 'partido', $args );
+    36	}
+    37	add_action( 'init', 'str_register_cpt_partidos' );

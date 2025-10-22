@@ -1,0 +1,246 @@
+     1	<?php
+     2	/** Antes:  includes/forms/form-resultado-padel.php
+     3	 * Formulario visual de introducción y validación de resultados de partido - Pádel
+     4	 * SaaS Torneos de Raqueta
+     5	 * Ruta: /includes/forms/form-resultado-padel.php
+     6	 * 
+     7	 * Recibe: $partido_id (ID del partido), $modo (opcional: 'ver' o 'editar')
+     8	 */
+     9	
+    10	// Función para logs profesionales en debug-saas-torneos.log
+    11	if (!function_exists('str_escribir_log')) {
+    12	    function str_escribir_log($mensaje, $origen = '') {
+    13	        $ruta_log = plugin_dir_path(dirname(__FILE__, 2)) . 'debug-saas-torneos.log';
+    14	        $timestamp = date('[Y-m-d H:i:s]');
+    15	        $origen = $origen ? "[$origen]" : '';
+    16	        if (is_array($mensaje) || is_object($mensaje)) {
+    17	            $mensaje = print_r($mensaje, true);
+    18	        }
+    19	        $linea = "$timestamp $origen $mensaje" . PHP_EOL;
+    20	        file_put_contents($ruta_log, $linea, FILE_APPEND | LOCK_EX);
+    21	    }
+    22	}
+    23	
+    24	// --- LOG DE INICIO (Para saber si se incluye el archivo) ---
+    25	str_escribir_log([
+    26	    'INICIO_FORM' => true,
+    27	    'partido_id' => isset($partido_id) ? $partido_id : 'NO DEFINIDO'
+    28	], 'FORM_PADEL');
+    29	
+    30	// Comprobar seguridad básica
+    31	if (!isset($partido_id) || !get_post($partido_id)) {
+    32	    str_escribir_log('Partido no válido. $partido_id=' . (isset($partido_id) ? $partido_id : 'NO DEFINIDO'), 'FORM_PADEL');
+    33	    echo '<div class="str-error">Partido no válido</div>';
+    34	    return;
+    35	}
+    36	
+    37	$partido = get_post($partido_id);
+    38	$tipo_partido = get_field('tipo_partido', $partido_id); // 'parejas' o 'individual'
+    39	
+    40	// *** CAMPOS DEL GRUPO ACF DE PÁDEL ***
+    41	$estado         = get_field('estado', $partido_id); // Select: pendiente, resultado_propuesto, etc.
+    42	$ronda          = get_field('ronda', $partido_id); // Select: grupos, cuartos, etc.
+    43	$ganador_id     = get_field('ganador', $partido_id); // Relationship, ID
+    44	$propuesto_por  = get_field('propuesto_por', $partido_id); // User, ID
+    45	$observaciones  = get_field('oberservaciones', $partido_id); // Textarea
+    46	$resultado      = get_field('resultado_padel', $partido_id); // repeater array
+    47	
+    48	// Nueva relación para competición de pádel
+    49	$competicion_padel = get_field('competicion_padel', $partido_id);
+    50	
+    51	// LOG después de cargar campos
+    52	str_escribir_log([
+    53	    'DESPUES_CAMPOS_ACF' => true,
+    54	    'partido_id' => $partido_id,
+    55	    'estado' => $estado,
+    56	    'ronda' => $ronda,
+    57	    'ganador_id' => $ganador_id,
+    58	    'pareja_1' => get_field('pareja_1', $partido_id),
+    59	    'pareja_2' => get_field('pareja_2', $partido_id),
+    60	    'competicion_padel' => $competicion_padel,
+    61	], 'FORM_PADEL');
+    62	
+    63	// Opciones de ronda predefinidas
+    64	$rondas_disponibles = [
+    65	    'Grupos'  => 'Grupos',
+    66	    'Cuartos' => 'Cuartos',
+    67	    'Semis'   => 'Semis',
+    68	    'Final'   => 'Final',
+    69	];
+    70	
+    71	// Obtener nombres de equipos/jugadores y sus IDs reales
+    72	if (strtolower($tipo_partido) === 'parejas') {
+    73	    $equipo1_id_arr = get_field('pareja_1', $partido_id);
+    74	    $equipo1_id = is_array($equipo1_id_arr) ? $equipo1_id_arr[0] : $equipo1_id_arr;
+    75	
+    76	    $equipo2_id_arr = get_field('pareja_2', $partido_id);
+    77	    $equipo2_id = is_array($equipo2_id_arr) ? $equipo2_id_arr[0] : $equipo2_id_arr;
+    78	
+    79	    $equipo1_nombre = $equipo1_id ? get_the_title($equipo1_id) : 'N/A';
+    80	    $equipo2_nombre = $equipo2_id ? get_the_title($equipo2_id) : 'N/A';
+    81	} else {
+    82	    $equipo1_id = get_field('jugador_1', $partido_id);
+    83	    $equipo2_id = get_field('jugador_2', $partido_id);
+    84	    $equipo1_nombre = $equipo1_id ? get_the_title($equipo1_id) : 'N/A';
+    85	    $equipo2_nombre = $equipo2_id ? get_the_title($equipo2_id) : 'N/A';
+    86	}
+    87	
+    88	// Mostrar SIEMPRE 3 sets para pádel
+    89	$max_sets = 3;
+    90	// Inicializar sets vacíos
+    91	$sets = [
+    92	    0 => ['juegos_equipo_1'=>'', 'juegos_equipo_2'=>'', 'tipo_set'=>'Normal'],
+    93	    1 => ['juegos_equipo_1'=>'', 'juegos_equipo_2'=>'', 'tipo_set'=>'Normal'],
+    94	    2 => ['juegos_equipo_1'=>'', 'juegos_equipo_2'=>'', 'tipo_set'=>'Normal']
+    95	];
+    96	
+    97	if (is_array($resultado)) {
+    98	    foreach ($resultado as $idx => $set) {
+    99	        if ($idx < $max_sets) {
+   100	            $sets[$idx]['juegos_equipo_1'] = isset($set['juegos_equipo_1']) ? $set['juegos_equipo_1'] : '';
+   101	            $sets[$idx]['juegos_equipo_2'] = isset($set['juegos_equipo_2']) ? $set['juegos_equipo_2'] : '';
+   102	            $sets[$idx]['tipo_set']        = isset($set['tipo_set']) ? $set['tipo_set'] : 'Normal';
+   103	        }
+   104	    }
+   105	}
+   106	
+   107	// Permisos y modo
+   108	$current_user_id = get_current_user_id();
+   109	$current_user_roles = function_exists('wp_get_current_user') ? wp_get_current_user()->roles : [];
+   110	$puede_editar = true; // Temporalmente a true para pruebas
+   111	
+   112	// --- LOG PRE-RENDER: Confirmar datos principales antes de pintar la tabla ---
+   113	str_escribir_log([
+   114	    'RENDER_FORM' => true,
+   115	    'partido_id'   => $partido_id,
+   116	    'estado'       => $estado,
+   117	    'puede_editar' => $puede_editar,
+   118	    'equipo1_id'   => $equipo1_id,
+   119	    'equipo1_nombre' => $equipo1_nombre,
+   120	    'equipo2_id'   => $equipo2_id,
+   121	    'equipo2_nombre' => $equipo2_nombre,
+   122	    'sets'         => $sets
+   123	], 'FORM_PADEL');
+   124	
+   125	// --- Mostrar el selector o badge de ronda --- //
+   126	?>
+   127	<div class="str-partido-ronda-select" style="margin-bottom: 16px;">
+   128	    <strong>Ronda:</strong>
+   129	    <?php if ($puede_editar && (in_array('administrator', $current_user_roles) || in_array('cliente', $current_user_roles))) : ?>
+   130	        <form method="post" class="form-editar-ronda" action="">
+   131	            <input type="hidden" name="action" value="str_actualizar_ronda">
+   132	            <input type="hidden" name="partido_id" value="<?php echo esc_attr($partido_id); ?>">
+   133	            <select name="ronda" class="select-ronda" style="padding:3px 6px;">
+   134	                <?php foreach ($rondas_disponibles as $val => $label) : ?>
+   135	                    <option value="<?php echo esc_attr($val); ?>" <?php selected($ronda, $val); ?>><?php echo esc_html($label); ?></option>
+   136	                <?php endforeach; ?>
+   137	            </select>
+   138	            <button type="submit" style="margin-left:6px;padding:3px 10px;">Guardar</button>
+   139	        </form>
+   140	        <script>
+   141	        document.addEventListener('DOMContentLoaded', function() {
+   142	            document.querySelectorAll('.form-editar-ronda').forEach(form => {
+   143	                form.addEventListener('submit', function(e){
+   144	                    e.preventDefault();
+   145	                    const fd = new FormData(form);
+   146	                    fetch(str_ajax_obj.ajax_url, {
+   147	                        method: 'POST',
+   148	                        credentials: 'same-origin',
+   149	                        body: fd
+   150	                    }).then(res => res.json()).then(resp => {
+   151	                        if (resp.success) location.reload();
+   152	                        else alert('Error al actualizar la ronda');
+   153	                    });
+   154	                });
+   155	            });
+   156	        });
+   157	        </script>
+   158	    <?php else: ?>
+   159	        <span style="margin-left:10px;"><?php echo esc_html($ronda ?: 'Sin definir'); ?></span>
+   160	    <?php endif; ?>
+   161	</div>
+   162	
+   163	<div class="str-partido-tabla-wrap">
+   164	    <table class="str-partido-resultado">
+   165	        <thead>
+   166	            <tr>
+   167	                <th></th>
+   168	                <?php for ($i = 1; $i <= $max_sets; $i++): ?>
+   169	                    <th>Set-<?php echo $i; ?></th>
+   170	                <?php endfor; ?>
+   171	            </tr>
+   172	        </thead>
+   173	        <tbody>
+   174	            <tr>
+   175	                <td class="<?php echo ($ganador_id == $equipo1_id) ? 'str-ganador' : ''; ?>">
+   176	                    <?php echo esc_html($equipo1_nombre); ?>
+   177	                </td>
+   178	                <?php foreach ($sets as $k => $set): ?>
+   179	                    <td>
+   180	                        <?php if ($puede_editar && in_array(strtolower($estado), ['pendiente', 'resultado propuesto'])): ?>
+   181	                            <input type="number"
+   182	                                   class="str-set-input"
+   183	                                   name="sets[<?php echo $k; ?>][juegos_equipo_1]"
+   184	                                   value="<?php echo esc_attr($set['juegos_equipo_1']); ?>"
+   185	                                   min="0" max="7"
+   186	                                   <?php echo (strtolower($estado) == 'confirmado') ? 'readonly' : ''; ?>
+   187	                                   data-set="<?php echo $k; ?>" data-equipo="1">
+   188	                            <select name="sets[<?php echo $k; ?>][tipo_set]" class="str-set-tipo" style="margin-left:5px;">
+   189	                                <option value="Normal" <?php selected($set['tipo_set'], 'Normal'); ?>>Normal</option>
+   190	                                <option value="Tie-Break" <?php selected($set['tipo_set'], 'Tie-Break'); ?>>Tie-Break</option>
+   191	                                <option value="Super Tie-Break" <?php selected($set['tipo_set'], 'Super Tie-Break'); ?>>Super Tie-Break</option>
+   192	                            </select>
+   193	                        <?php else: ?>
+   194	                            <?php echo ($set['juegos_equipo_1'] !== '') ? esc_html($set['juegos_equipo_1']) : '-'; ?>
+   195	                            <?php if ($set['tipo_set']) : ?>
+   196	                                <span class="str-tipo-set-label">(<?php echo esc_html($set['tipo_set']); ?>)</span>
+   197	                            <?php endif; ?>
+   198	                        <?php endif; ?>
+   199	                    </td>
+   200	                <?php endforeach; ?>
+   201	            </tr>
+   202	            <tr>
+   203	                <td class="<?php echo ($ganador_id == $equipo2_id) ? 'str-ganador' : ''; ?>">
+   204	                    <?php echo esc_html($equipo2_nombre); ?>
+   205	                </td>
+   206	                <?php foreach ($sets as $k => $set): ?>
+   207	                    <td>
+   208	                        <?php if ($puede_editar && in_array(strtolower($estado), ['pendiente', 'resultado propuesto'])): ?>
+   209	                            <input type="number"
+   210	                                   class="str-set-input"
+   211	                                   name="sets[<?php echo $k; ?>][juegos_equipo_2]"
+   212	                                   value="<?php echo esc_attr($set['juegos_equipo_2']); ?>"
+   213	                                   min="0" max="7"
+   214	                                   <?php echo (strtolower($estado) == 'confirmado') ? 'readonly' : ''; ?>
+   215	                                   data-set="<?php echo $k; ?>" data-equipo="2">
+   216	                        <?php else: ?>
+   217	                            <?php echo ($set['juegos_equipo_2'] !== '') ? esc_html($set['juegos_equipo_2']) : '-'; ?>
+   218	                        <?php endif; ?>
+   219	                    </td>
+   220	                <?php endforeach; ?>
+   221	            </tr>
+   222	        </tbody>
+   223	    </table>
+   224	    <?php if ($puede_editar && in_array(strtolower($estado), ['pendiente', 'resultado propuesto'])): ?>
+   225	        <button class="str-btn-confirmar-resultado" data-partido="<?php echo esc_attr($partido_id); ?>">
+   226	            Confirmar resultado
+   227	        </button>
+   228	    <?php elseif (strtolower($estado) === 'pendiente de validación'): ?>
+   229	        <div class="str-msg-pendiente-validacion">
+   230	            Resultado pendiente de validación por el rival.
+   231	        </div>
+   232	    <?php elseif (strtolower($estado) === 'confirmado'): ?>
+   233	        <div class="str-badge-confirmado">Resultado confirmado</div>
+   234	    <?php endif; ?>
+   235	</div>
+   236	
+   237	<!-- Puedes incluir aquí el campo observaciones si lo deseas -->
+   238	<?php if ($observaciones): ?>
+   239	    <div class="str-observaciones-partido">
+   240	        <strong>Observaciones:</strong> <?php echo esc_html($observaciones); ?>
+   241	    </div>
+   242	<?php endif; ?>
+   243	
+   244	<?php
+   245	// Incluir aquí scripts JS solo si hace falta (o bien encolarlo globalmente)
+   246	?>

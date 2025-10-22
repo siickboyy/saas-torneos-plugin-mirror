@@ -1,0 +1,351 @@
+     1	// Pairs (multi-selección) – compatible con legacy y nueva plantilla
+     2	// - Engancha tanto #btn-abrir-modal-pareja como .js-add-pareja
+     3	// - Usa acciones desde str_parejas_ajax_obj.actions con fallback a saas_*
+     4	// - Soporta str_parejas_ajax_obj.torneo_id o .post_id
+     5	// - Pinta parejas en: 
+     6	//     • Ficha de torneo → #tabla-parejas tbody
+     7	//     • Modal (si existe) → #tabla-parejas-confirmadas
+     8	// - Logs detallados para depuración
+     9	
+    10	(function ($, w) {
+    11	  'use strict';
+    12	
+    13	  if (typeof $ === 'undefined') {
+    14	    console.error('[PAIRS] jQuery no disponible');
+    15	    return;
+    16	  }
+    17	
+    18	  // Helpers de supresión (cooperan con /groups/)
+    19	  function __isPairsSuppressed() {
+    20	    try { return window.__STR_SUPPRESS_PAIRS_MODAL__ && Date.now() < window.__STR_SUPPRESS_PAIRS_MODAL__; } catch(_) { return false; }
+    21	  }
+    22	  function __insideGroups(el) {
+    23	    try { return !!(el && el.closest && el.closest('#str-gestion-grupos')); } catch(_) { return false; }
+    24	  }
+    25	
+    26	  $(function () {
+    27	    // --- CONFIG -------------------------------------------------------------
+    28	    var cfg   = w.str_parejas_ajax_obj || {};
+    29	    var AJAX  = cfg.ajax_url || (w.str_ajax_obj && w.str_ajax_obj.ajax_url) || '';
+    30	    var NONCE = cfg.nonce    || (w.str_ajax_obj && w.str_ajax_obj.nonce)    || '';
+    31	    var TORNEO_ID = parseInt(cfg.torneo_id || cfg.post_id || 0, 10) || 0;
+    32	
+    33	    // Acciones (usar las que vinieron localizadas; si no, fallback a saas_*)
+    34	    var ACT = (cfg.actions || {});
+    35	    var ACTIONS = {
+    36	      BUSCAR:  ACT.buscar  || 'saas_buscar_jugadores',
+    37	      LISTAR:  ACT.listar  || 'saas_listar_parejas_multiseleccion',
+    38	      GUARDAR: ACT.guardar || 'saas_guardar_pareja_multiseleccion'
+    39	    };
+    40	
+    41	    console.log('[PAIRS][BOOT]', { AJAX, NONCE, TORNEO_ID, ACTIONS, cfg });
+    42	
+    43	    // --- SELECTORES (legacy + nuevos) --------------------------------------
+    44	    var $btnAbrir     = $('#btn-abrir-modal-pareja');        // legacy
+    45	    var $btnAbrirAlt  = $('.js-add-pareja');                 // nuevo
+    46	    var $modal        = $('#modal-parejas-multiseleccion');  // modal (si existe)
+    47	    var $cerrar       = $('.cerrar-modal-parejas, .saas-tr-modal__close, .saas-tr-modal_close, .js-close-modal');
+    48	
+    49	    // Slots usados en el MODAL (si existe):
+    50	    var $tablaJugadores = $('#tabla-jugadores-disponibles');
+    51	    var $tablaParejasModal = $('#tabla-parejas-confirmadas');
+    52	
+    53	    // Slot de la FICHA (siempre):
+    54	    var $tablaParejasMainBody = $('#tabla-parejas tbody');
+    55	
+    56	    var $selWrap      = $('#jugadores-seleccionados');
+    57	    var $btnConfirmar = $('#btn-confirmar-pareja');
+    58	    var $formBuscar   = $('#form-buscar-jugadores');
+    59	    var $msgParejas   = $('#mensaje-parejas');
+    60	
+    61	    var seleccionados = [];
+    62	    var jugadoresCache = {};
+    63	
+    64	    // --- UTIL ---------------------------------------------------------------
+    65	    function showModal() {
+    66	      // No abrir si suprimido por flujo de grupos
+    67	      if (__isPairsSuppressed()) {
+    68	        console.warn('[PAIRS] Apertura del modal SUPRIMIDA por flujo de grupos.');
+    69	        return;
+    70	      }
+    71	
+    72	      if (!$modal.length) {
+    73	        console.warn('[PAIRS] Modal #modal-parejas-multiseleccion no está en el DOM. (Solo ficha)');
+    74	        return;
+    75	      }
+    76	      // Normaliza estado abierto + aria
+    77	      $modal.css('display', 'flex').attr('aria-modal', 'true').attr('aria-hidden', 'false');
+    78	      $('body').addClass('saas-tr-modal-open');
+    79	    }
+    80	    function hideModal() {
+    81	      if ($modal.length) {
+    82	        $modal.attr('aria-hidden', 'true').css('display', 'none');
+    83	        $('body').removeClass('saas-tr-modal-open');
+    84	      }
+    85	      limpiarSeleccion();
+    86	    }
+    87	    function setMsg(msg, type) {
+    88	      if (!$msgParejas.length) return;
+    89	      $msgParejas.removeClass().addClass(type || '').html(msg).fadeIn();
+    90	      setTimeout(function () { $msgParejas.fadeOut(); }, 2200);
+    91	    }
+    92	    function getNombreJugador(id) {
+    93	      return jugadoresCache[id] ? (jugadoresCache[id].nombre + ' ' + jugadoresCache[id].apellido) : '';
+    94	    }
+    95	    function actualizarCheckboxes() {
+    96	      $('.chk-jugador').each(function () {
+    97	        var id = parseInt($(this).data('id'), 10);
+    98	        if (seleccionados.includes(id)) {
+    99	          $(this).prop('checked', true).prop('disabled', false);
+   100	        } else if (seleccionados.length >= 2) {
+   101	          $(this).prop('disabled', true);
+   102	        } else {
+   103	          $(this).prop('disabled', false);
+   104	        }
+   105	      });
+   106	    }
+   107	    function actualizarParejaEnPreparacion() {
+   108	      if (!$selWrap.length) return;
+   109	      var html = '';
+   110	      if (seleccionados.length === 0) {
+   111	        html = '<p>Selecciona dos jugadores para formar una pareja.</p>';
+   112	      } else {
+   113	        seleccionados.forEach(function (id, idx) {
+   114	          html += '<span class="jugador-seleccionado">Jugador ' + (idx + 1) + ': <strong>' + getNombreJugador(id) + '</strong> <button class="btn-quitar-jugador" data-id="' + id + '" aria-label="Quitar jugador">&times;</button></span>';
+   115	        });
+   116	      }
+   117	      $selWrap.html(html);
+   118	      if ($btnConfirmar.length) $btnConfirmar.prop('disabled', seleccionados.length !== 2);
+   119	    }
+   120	    function limpiarSeleccion() {
+   121	      seleccionados = [];
+   122	      actualizarParejaEnPreparacion();
+   123	      actualizarCheckboxes();
+   124	    }
+   125	
+   126	    // --- RENDER: Modal ------------------------------------------------------
+   127	    function renderParejasModal(parejas) {
+   128	      if (!$tablaParejasModal.length) return;
+   129	      var html = '<table class="tabla-parejas-confirmadas"><thead><tr><th>#</th><th>Jugador 1</th><th>Jugador 2</th></tr></thead><tbody>';
+   130	      if (!parejas || !parejas.length) {
+   131	        html += '<tr><td colspan="3" style="color:#888;text-align:center;">Aún no hay parejas confirmadas.</td></tr>';
+   132	      } else {
+   133	        parejas.forEach(function (p, idx) {
+   134	          // Tolerante a claves distintas
+   135	          var j1 = p.jugador_1_nombre || p.jugador1 || p.jugador_1 || '';
+   136	          var j2 = p.jugador_2_nombre || p.jugador2 || p.jugador_2 || '';
+   137	          html += '<tr><td>' + (idx + 1) + '</td><td>' + j1 + '</td><td>' + j2 + '</td></tr>';
+   138	        });
+   139	      }
+   140	      html += '</tbody></table>';
+   141	      $tablaParejasModal.html(html);
+   142	    }
+   143	
+   144	    // --- RENDER: Ficha Torneo ----------------------------------------------
+   145	    function renderParejasMain(parejas) {
+   146	      if (!$tablaParejasMainBody.length) return;
+   147	      var html = '';
+   148	
+   149	      if (!parejas || !parejas.length) {
+   150	        html += '<tr><td colspan="4" style="color:#8aa0c4;text-align:center;padding:14px 8px;">Aún no hay parejas confirmadas.</td></tr>';
+   151	      } else {
+   152	        parejas.forEach(function (p, idx) {
+   153	          var j1 = p.jugador_1_nombre || p.jugador1 || p.jugador_1 || '';
+   154	          var j2 = p.jugador_2_nombre || p.jugador2 || p.jugador_2 || '';
+   155	          html += '<tr>' +
+   156	                    '<td>' + (idx + 1) + '</td>' +
+   157	                    '<td>' + j1 + '</td>' +
+   158	                    '<td>' + j2 + '</td>' +
+   159	                    '<td>—</td>' +
+   160	                  '</tr>';
+   161	        });
+   162	      }
+   163	
+   164	      $tablaParejasMainBody.html(html);
+   165	    }
+   166	
+   167	    // --- RENDER: Jugadores disponibles (Modal) ------------------------------
+   168	    function renderJugadores(lista) {
+   169	      if (!$tablaJugadores.length) return;
+   170	
+   171	      jugadoresCache = {};
+   172	      var html = '<table class="tabla-jugadores-disponibles"><thead>' +
+   173	        '<tr><th></th><th>Nombre</th><th>Apellido</th><th>Email</th></tr></thead><tbody>';
+   174	
+   175	      if (!lista || !lista.length) {
+   176	        html += '<tr><td colspan="4" style="color:#888;text-align:center;">No hay jugadores disponibles.</td></tr>';
+   177	      } else {
+   178	        lista.forEach(function (jug) {
+   179	          jugadoresCache[jug.ID] = jug;
+   180	          var checked  = seleccionados.includes(jug.ID) ? 'checked disabled' : '';
+   181	          var disabled = (seleccionados.length >= 2 && !seleccionados.includes(jug.ID)) ? 'disabled' : '';
+   182	          html += '<tr>' +
+   183	                    '<td><input type="checkbox" class="chk-jugador" data-id="' + jug.ID + '" ' + checked + ' ' + disabled + '></td>' +
+   184	                    '<td>' + jug.nombre + '</td>' +
+   185	                    '<td>' + jug.apellido + '</td>' +
+   186	                    '<td>' + jug.email + '</td>' +
+   187	                  '</tr>';
+   188	        });
+   189	      }
+   190	
+   191	      html += '</tbody></table>';
+   192	      $tablaJugadores.html(html);
+   193	    }
+   194	
+   195	    // --- AJAX ---------------------------------------------------------------
+   196	    function cargarParejasConfirmadas() {
+   197	      // Si no tenemos ningún destino, no disparamos petición
+   198	      if (!$tablaParejasMainBody.length && !$tablaParejasModal.length) return;
+   199	
+   200	      $.ajax({
+   201	        url: AJAX,
+   202	        method: 'POST',
+   203	        data: {
+   204	          action: ACTIONS.LISTAR,
+   205	          nonce: NONCE,
+   206	          torneo_id: TORNEO_ID
+   207	        }
+   208	      }).done(function (res) {
+   209	        var parejas = (res && res.success && res.data && res.data.parejas) ? res.data.parejas : [];
+   210	        renderParejasMain(parejas);
+   211	        renderParejasModal(parejas);
+   212	      }).fail(function () {
+   213	        // Mensaje amable en la ficha (si existe)
+   214	        if ($tablaParejasMainBody.length) {
+   215	          $tablaParejasMainBody.html('<tr><td colspan="4" style="color:#b00;text-align:center;padding:14px 8px;">Error al cargar parejas.</td></tr>');
+   216	        }
+   217	        if ($tablaParejasModal.length) {
+   218	          $tablaParejasModal.html('<p style="color:#b00;">Error al cargar parejas.</p>');
+   219	        }
+   220	      });
+   221	    }
+   222	
+   223	    function cargarJugadoresDisponibles(nombre, apellido, email) {
+   224	      if (!$tablaJugadores.length) return;
+   225	      $tablaJugadores.html('<p>Cargando jugadores...</p>');
+   226	
+   227	      $.ajax({
+   228	        url: AJAX,
+   229	        method: 'POST',
+   230	        data: {
+   231	          action: ACTIONS.BUSCAR,
+   232	          nonce: NONCE,
+   233	          torneo_id: TORNEO_ID,
+   234	          nombre: nombre || '',
+   235	          apellido: apellido || '',
+   236	          email: email || ''
+   237	        }
+   238	      }).done(function (res) {
+   239	        if (res && res.success) {
+   240	          renderJugadores(res.data && res.data.jugadores ? res.data.jugadores : []);
+   241	        } else {
+   242	          $tablaJugadores.html('<p style="color:#b00;">' + (res && res.data && res.data.mensaje ? res.data.mensaje : 'No se pudo cargar jugadores') + '</p>');
+   243	        }
+   244	      }).fail(function () {
+   245	        $tablaJugadores.html('<p style="color:#b00;">Error al cargar jugadores.</p>');
+   246	      });
+   247	    }
+   248	
+   249	    function guardarPareja() {
+   250	      if (seleccionados.length !== 2) return;
+   251	      if (!$btnConfirmar.length) return;
+   252	
+   253	      $btnConfirmar.prop('disabled', true).text('Guardando...');
+   254	      $.post(AJAX, {
+   255	        action: ACTIONS.GUARDAR,
+   256	        nonce: NONCE,
+   257	        torneo_id: TORNEO_ID,
+   258	        jugador_1: seleccionados[0],
+   259	        jugador_2: seleccionados[1]
+   260	      }).done(function (res) {
+   261	        $btnConfirmar.prop('disabled', false).text('Confirmar pareja');
+   262	        if (res && res.success) {
+   263	          setMsg('¡Pareja guardada con éxito!', 'success');
+   264	          cargarParejasConfirmadas();      // ← refresca ficha + modal
+   265	          cargarJugadoresDisponibles();    // ← refresca lista en modal
+   266	          limpiarSeleccion();
+   267	        } else {
+   268	          setMsg((res && res.data && res.data.mensaje) ? res.data.mensaje : 'Error al guardar pareja', 'error');
+   269	        }
+   270	      }).fail(function () {
+   271	        $btnConfirmar.prop('disabled', false).text('Confirmar pareja');
+   272	        setMsg('Error de red al guardar pareja', 'error');
+   273	      });
+   274	    }
+   275	
+   276	    // --- LISTENERS ----------------------------------------------------------
+   277	    // Abrir modal
+   278	    $btnAbrir.on('click', function (e) {
+   279	      if (__isPairsSuppressed() || __insideGroups(e.target)) {
+   280	        e.preventDefault();
+   281	        console.warn('[PAIRS] Click ignorado (supresión activa o click dentro de grupos).');
+   282	        return;
+   283	      }
+   284	      e.preventDefault();
+   285	      showModal();
+   286	      cargarParejasConfirmadas();
+   287	      cargarJugadoresDisponibles();
+   288	    });
+   289	
+   290	    $btnAbrirAlt.on('click', function (e) {
+   291	      if (__isPairsSuppressed() || __insideGroups(e.target)) {
+   292	        e.preventDefault();
+   293	        console.warn('[PAIRS] Click ignorado (supresión activa o click dentro de grupos).');
+   294	        return;
+   295	      }
+   296	      e.preventDefault();
+   297	      showModal();
+   298	      cargarParejasConfirmadas();
+   299	      cargarJugadoresDisponibles();
+   300	    });
+   301	
+   302	    // Cerrar modal
+   303	    $cerrar.on('click', function (e) { e.preventDefault(); hideModal(); });
+   304	    $(document).on('keydown', function (e) {
+   305	      if (e.key === 'Escape' && $modal.length && $modal.is(':visible')) hideModal();
+   306	    });
+   307	    if ($modal.length) {
+   308	      $modal.on('click', function (e) {
+   309	        if (e.target === this || $(e.target).hasClass('saas-tr-modal_backdrop') || $(e.target).hasClass('saas-tr-modal__backdrop')) {
+   310	          hideModal();
+   311	        }
+   312	      });
+   313	    }
+   314	
+   315	    // Buscar jugadores (modal)
+   316	    $formBuscar.on('submit', function (e) {
+   317	      e.preventDefault();
+   318	      var nombre   = $('#busqueda-nombre').val();
+   319	      var apellido = $('#busqueda-apellido').val();
+   320	      var email    = $('#busqueda-email').val();
+   321	      cargarJugadoresDisponibles(nombre, apellido, email);
+   322	    });
+   323	
+   324	    // Selección de jugadores (modal)
+   325	    $(document).on('change', '.chk-jugador', function () {
+   326	      var id = parseInt($(this).data('id'), 10);
+   327	      if ($(this).is(':checked')) {
+   328	        if (seleccionados.length < 2) { seleccionados.push(id); } else { this.checked = false; }
+   329	      } else {
+   330	        seleccionados = seleccionados.filter(function (x) { return x !== id; });
+   331	      }
+   332	      actualizarParejaEnPreparacion();
+   333	      actualizarCheckboxes();
+   334	    });
+   335	
+   336	    $(document).on('click', '.btn-quitar-jugador', function () {
+   337	      var id = parseInt($(this).data('id'), 10);
+   338	      seleccionados = seleccionados.filter(function (x) { return x !== id; });
+   339	      actualizarParejaEnPreparacion();
+   340	      actualizarCheckboxes();
+   341	    });
+   342	
+   343	    $btnConfirmar.on('click', function () { guardarPareja(); });
+   344	
+   345	    // --- INIT ---------------------------------------------------------------
+   346	    actualizarParejaEnPreparacion();
+   347	    cargarParejasConfirmadas(); // ← pinta en la ficha al entrar
+   348	    console.log('[PAIRS][READY] Listeners activos');
+   349	  });
+   350	
+   351	})(jQuery, window);

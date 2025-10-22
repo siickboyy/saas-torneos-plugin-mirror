@@ -1,0 +1,234 @@
+     1	<?php
+     2	/**
+     3	 * AJAX: Guardar snapshot de simulación (temporal)
+     4	 * Ruta: includes/features/simulator/ajax/guardar-simulacion.php
+     5	 */
+     6	
+     7	if (!defined('ABSPATH')) { exit; }
+     8	
+     9	/**
+    10	 * Logger básico al archivo debug-saas-torneos.log del plugin.
+    11	 * (Reutilizamos misma firma)
+    12	 */
+    13	if (!function_exists('str_saas_log')) {
+    14	    function str_saas_log($message, $context = []) {
+    15	        $upload_dir = wp_upload_dir();
+    16	        $base = dirname(dirname(__DIR__)); // .../includes -> base del plugin
+    17	        $log_path = trailingslashit($base) . 'debug-saas-torneos.log';
+    18	        if (!is_writable($base)) {
+    19	            $log_path = trailingslashit($upload_dir['basedir']) . 'debug-saas-torneos.log';
+    20	        }
+    21	        $line = '[' . date('Y-m-d H:i:s') . '] ' . (is_string($message) ? $message : wp_json_encode($message, JSON_UNESCAPED_UNICODE));
+    22	        if (!empty($context)) {
+    23	            $line .= ' | ' . wp_json_encode($context, JSON_UNESCAPED_UNICODE);
+    24	        }
+    25	        $line .= PHP_EOL;
+    26	        @file_put_contents($log_path, $line, FILE_APPEND);
+    27	    }
+    28	}
+    29	
+    30	/**
+    31	 * Helpers (solo si no existen ya)
+    32	 */
+    33	if (!function_exists('str_coste_para_grupos')) {
+    34	    function str_coste_para_grupos($P, $G, $target_size, $es_premios_por_grupo, $fase_final, $plazas_por_fase) {
+    35	        if ($G < 1) return PHP_INT_MAX;
+    36	        $base  = intdiv($P, $G);
+    37	        $resto = $P % $G;
+    38	
+    39	        $min_size = $base;
+    40	        $max_size = $base + ($resto > 0 ? 1 : 0);
+    41	
+    42	        $dev_min = ($min_size - $target_size);
+    43	        $dev_max = ($max_size - $target_size);
+    44	        $cost_tamano = ($G - $resto) * ($dev_min * $dev_min) + $resto * ($dev_max * $dev_max);
+    45	
+    46	        $cost_fase = 0;
+    47	        if ($es_premios_por_grupo) {
+    48	            $plazas_req = isset($plazas_por_fase[$fase_final]) ? $plazas_por_fase[$fase_final] : 2;
+    49	            if ($min_size < $plazas_req) {
+    50	                $cost_fase = 100000 * ($plazas_req - $min_size);
+    51	            }
+    52	        }
+    53	
+    54	        $cost_tiny = 0;
+    55	        if ($min_size < 3) {
+    56	            $cost_tiny = 200 * (3 - $min_size);
+    57	        }
+    58	
+    59	        $pref_g = 4;
+    60	        $cost_pref_g = 2 * (($G - $pref_g) * ($G - $pref_g));
+    61	
+    62	        return $cost_tamano + $cost_fase + $cost_tiny + $cost_pref_g;
+    63	    }
+    64	}
+    65	if (!function_exists('str_elegir_num_grupos_optimo')) {
+    66	    function str_elegir_num_grupos_optimo($P, $es_premios_por_grupo, $fase_final, $plazas_por_fase) {
+    67	        $target_size = 4;
+    68	        $max_candidatos = max(1, min(12, $P));
+    69	        $mejorG = 1;
+    70	        $mejorCoste = PHP_INT_MAX;
+    71	
+    72	        for ($G = 1; $G <= $max_candidatos; $G++) {
+    73	            $coste = str_coste_para_grupos($P, $G, $target_size, $es_premios_por_grupo, $fase_final, $plazas_por_fase);
+    74	            if ($coste < $mejorCoste) {
+    75	                $mejorCoste = $coste;
+    76	                $mejorG = $G;
+    77	            }
+    78	        }
+    79	        return max(1, (int) $mejorG);
+    80	    }
+    81	}
+    82	
+    83	/**
+    84	 * Hooks AJAX
+    85	 */
+    86	add_action('wp_ajax_str_guardar_simulacion', 'str_guardar_simulacion');
+    87	// add_action('wp_ajax_nopriv_str_guardar_simulacion', 'str_guardar_simulacion'); // si lo quieres público
+    88	
+    89	/**
+    90	 * Handler: guarda snapshot de la simulación en un transient (48h)
+    91	 */
+    92	if (!function_exists('str_guardar_simulacion')) {
+    93	function str_guardar_simulacion() {
+    94	    try {
+    95	        // Seguridad básica
+    96	        if (!is_user_logged_in()) {
+    97	            wp_send_json_error(['msg' => 'Permisos insuficientes (login requerido).'], 403);
+    98	        }
+    99	        if (!isset($_POST['_ajax_nonce']) || !wp_verify_nonce(sanitize_text_field($_POST['_ajax_nonce']), 'str_nonce')) {
+   100	            wp_send_json_error(['msg' => 'Nonce inválido. Recarga la página.'], 400);
+   101	        }
+   102	        if (!current_user_can('read')) {
+   103	            wp_send_json_error(['msg' => 'Permisos insuficientes.'], 403);
+   104	        }
+   105	
+   106	        // Entradas mínimas
+   107	        $n_jugadores     = isset($_POST['n_jugadores']) ? absint($_POST['n_jugadores']) : 0;
+   108	        $n_grupos_input  = isset($_POST['n_grupos'])    ? absint($_POST['n_grupos'])    : 0;
+   109	        $fase_final_raw  = isset($_POST['fase_final'])  ? sanitize_text_field($_POST['fase_final']) : 'final';
+   110	        $organizar_final = isset($_POST['organizar_final']) ? sanitize_text_field($_POST['organizar_final']) : 'premios_grupo';
+   111	
+   112	        if ($n_jugadores < 2) {
+   113	            wp_send_json_error(['msg' => 'Introduce un número de jugadores válido (mínimo 2).'], 400);
+   114	        }
+   115	
+   116	        // Siempre por parejas
+   117	        $P = (int) floor($n_jugadores / 2);
+   118	        if ($P < 2) {
+   119	            wp_send_json_error(['msg' => 'No hay suficientes parejas para guardar la simulación.'], 400);
+   120	        }
+   121	
+   122	        // Normalizar fase y modo
+   123	        $fase_final = strtolower($fase_final_raw); // 'final' | 'semifinal' | 'cuartos' | 'octavos'
+   124	        $org_val    = strtolower($organizar_final);
+   125	        $es_premios_por_grupo = (strpos($org_val, 'grupo') !== false || $org_val === 'premios' || $org_val === 'premios_grupo');
+   126	
+   127	        // Plazas por fase
+   128	        $plazas_por_fase = [
+   129	            'final'     => 2,
+   130	            'semifinal' => 4,
+   131	            'cuartos'   => 8,
+   132	            'octavos'   => 16,
+   133	        ];
+   134	
+   135	        // Elegir nº de grupos efectivo
+   136	        if ($n_grupos_input > 0) {
+   137	            $n_grupos = max(1, $n_grupos_input);
+   138	            $modo_grupos = 'fijo_cliente';
+   139	        } else {
+   140	            $n_grupos = str_elegir_num_grupos_optimo($P, $es_premios_por_grupo, $fase_final, $plazas_por_fase);
+   141	            $modo_grupos = 'auto_optimo';
+   142	        }
+   143	
+   144	        // Generar grupos equilibrados con placeholders
+   145	        $base   = intdiv($P, $n_grupos);
+   146	        $resto  = $P % $n_grupos;
+   147	        $letras = range('A', 'Z');
+   148	        $grupos = [];
+   149	        $indice = 1;
+   150	
+   151	        for ($i = 0; $i < $n_grupos; $i++) {
+   152	            $tam = $base + ($i < $resto ? 1 : 0);
+   153	            $nombre = isset($letras[$i]) ? $letras[$i] : 'G' . ($i + 1);
+   154	            $participantes = [];
+   155	            for ($p = 0; $p < $tam; $p++) {
+   156	                $participantes[] = "Pareja {$indice}";
+   157	                $indice++;
+   158	            }
+   159	            $grupos[] = [
+   160	                'nombre' => $nombre,
+   161	                'tam' => $tam,
+   162	                'participantes' => $participantes,
+   163	            ];
+   164	        }
+   165	
+   166	        // Metadatos útiles
+   167	        $tam_min_grupo = min(array_map(function($g){ return (int)$g['tam']; }, $grupos));
+   168	        $partidos_garantizados_min = max(0, $tam_min_grupo - 1);
+   169	
+   170	        // Semilla simple reproducible
+   171	        $semilla = wp_generate_uuid4();
+   172	
+   173	        // Snapshot
+   174	        $snapshot = [
+   175	            'tipo_torneo'          => 'parejas',
+   176	            'n_jugadores'          => $n_jugadores,
+   177	            'n_parejas_calc'       => $P,
+   178	            'n_grupos'             => $n_grupos,
+   179	            'fase_final'           => $fase_final,
+   180	            'cuadro_opcion'        => $es_premios_por_grupo ? 'premios_grupo' : 'mezclar',
+   181	            'grupos'               => $grupos,
+   182	            'partidos_garantizados_min' => $partidos_garantizados_min,
+   183	            'semilla'              => $semilla,
+   184	            'modo_grupos'          => $modo_grupos,
+   185	            'user_id'              => get_current_user_id(),
+   186	            'created_at'           => current_time('mysql'),
+   187	            'status'               => 'draft',
+   188	        ];
+   189	
+   190	        // Guardar snapshot en transient (48 horas)
+   191	        $sim_id = 's' . wp_generate_password(10, false, false);
+   192	        $transient_key = 'str_simulacion_' . $sim_id;
+   193	
+   194	        $json = wp_json_encode($snapshot, JSON_UNESCAPED_UNICODE);
+   195	        $ok = set_transient($transient_key, $json, 48 * HOUR_IN_SECONDS);
+   196	
+   197	        if (!$ok) {
+   198	            // Fallback: opción autoload=no
+   199	            $ok_option = update_option($transient_key, $json, false);
+   200	            if (!$ok_option) {
+   201	                wp_send_json_error(['msg' => 'No se pudo guardar la simulación (almacenamiento temporal).'], 500);
+   202	            }
+   203	        }
+   204	
+   205	        str_saas_log('SIMULACION guardada (transient)', [
+   206	            'simulacion_id' => $sim_id,
+   207	            'user_id'       => get_current_user_id(),
+   208	            'n_jugadores'   => $n_jugadores,
+   209	            'P'             => $P,
+   210	            'n_grupos'      => $n_grupos,
+   211	            'fase_final'    => $fase_final,
+   212	            'modo'          => $snapshot['cuadro_opcion'],
+   213	            'tam_min'       => $tam_min_grupo,
+   214	        ]);
+   215	
+   216	        wp_send_json_success([
+   217	            'simulacion_id' => $sim_id,
+   218	            'prefill' => [
+   219	                'deporte'         => 'padel',
+   220	                'tipo_competicion'=> 'grupos_fase_final',
+   221	                'formato'         => 'round_robin',
+   222	                'n_jugadores'     => $n_jugadores,
+   223	                'n_parejas'       => $P,
+   224	                'n_grupos'        => $n_grupos,
+   225	                'fase_final'      => $fase_final,
+   226	                'modo_final'      => $snapshot['cuadro_opcion'],
+   227	            ],
+   228	        ]);
+   229	
+   230	    } catch (\Throwable $e) {
+   231	        str_saas_log('SIMULACION excepcion', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+   232	        wp_send_json_error(['msg' => 'Error interno al guardar la simulación.'], 500);
+   233	    }
+   234	}}

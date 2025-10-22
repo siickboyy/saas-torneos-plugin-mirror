@@ -1,0 +1,118 @@
+     1	<?php
+     2	// includes/features/tournaments/ajax/guardar-torneo.php
+     3	if ( ! defined('ABSPATH') ) exit;
+     4	
+     5	/** Helpers */
+     6	if ( ! function_exists('saas_tr_first') ) {
+     7	  function saas_tr_first(array $keys, $default = '') {
+     8	    foreach ($keys as $k) {
+     9	      if (isset($_POST[$k]) && $_POST[$k] !== '') return wp_unslash($_POST[$k]);
+    10	      if (isset($_REQUEST[$k]) && $_REQUEST[$k] !== '') return wp_unslash($_REQUEST[$k]);
+    11	    }
+    12	    return $default;
+    13	  }
+    14	}
+    15	
+    16	/** Registra el mismo callback bajo varios nombres (compatibilidad) */
+    17	$__saas_tr_actions = [
+    18	  'str_guardar_torneo_editado', // existente
+    19	  'saas_tr_torneo_guardar',     // el que envía el front actual
+    20	  'saas_guardar_torneo',
+    21	  'guardar_torneo',
+    22	];
+    23	
+    24	foreach ($__saas_tr_actions as $__a) {
+    25	  add_action("wp_ajax_${__a}",        'str_guardar_torneo_editado_cb');
+    26	  add_action("wp_ajax_nopriv_${__a}", 'str_guardar_torneo_editado_cb');
+    27	}
+    28	
+    29	/** Callback unificado */
+    30	function str_guardar_torneo_editado_cb() {
+    31	  if ( ! function_exists('wp_send_json_error') ) {
+    32	    header('Content-Type: application/json; charset=utf-8');
+    33	    echo json_encode(['success'=>false,'data'=>['code'=>'wp_missing']]);
+    34	    exit;
+    35	  }
+    36	
+    37	  // 1) Requiere usuario autenticado
+    38	  if ( ! is_user_logged_in() ) {
+    39	    wp_send_json_error([
+    40	      'code'    => 'auth_required',
+    41	      'message' => 'Permisos insuficientes. Debes iniciar sesión.',
+    42	    ], 403);
+    43	  }
+    44	
+    45	  // 2) Nonce tolerante (si viene)
+    46	  $nonce = saas_tr_first(['nonce','security','_wpnonce','saas_nonce'], '');
+    47	  $nonce_ok = false;
+    48	  if ($nonce !== '') {
+    49	    $salts = ['str_nonce','saas_tr_nonce','saas_nonce','wp_rest'];
+    50	    foreach ($salts as $salt) {
+    51	      if (wp_verify_nonce($nonce, $salt)) { $nonce_ok = true; break; }
+    52	    }
+    53	    if ( ! $nonce_ok ) {
+    54	      wp_send_json_error([
+    55	        'code'       => 'nonce_invalid',
+    56	        'message'    => 'Nonce inválido o caducado.',
+    57	        'new_nonce'  => wp_create_nonce('str_nonce'),
+    58	      ], 403);
+    59	    }
+    60	  }
+    61	
+    62	  // 3) ID del torneo
+    63	  $torneo_id = intval( saas_tr_first(['torneo_id','post_id','id'], 0) );
+    64	  if ( ! $torneo_id || get_post_type($torneo_id) !== 'competicion' ) {
+    65	    wp_send_json_error([
+    66	      'code'    => 'bad_request',
+    67	      'message' => 'ID de torneo inválido.',
+    68	    ], 400);
+    69	  }
+    70	
+    71	  // 4) Capacidades cuando no hay nonce válido
+    72	  if ( ! $nonce_ok && ! current_user_can('edit_post', $torneo_id) ) {
+    73	    wp_send_json_error([
+    74	      'code'    => 'cap_required',
+    75	      'message' => 'Permisos insuficientes para editar este torneo.',
+    76	    ], 403);
+    77	  }
+    78	
+    79	  // 5) Campos (compatibles con varias UIs)
+    80	  $titulo      = saas_tr_first(['titulo','post_title','nombre_torneo'], '');
+    81	  $descripcion = saas_tr_first(['descripcion','content','descripcion_competicion','desc'], '');
+    82	  $fecha       = saas_tr_first(['fecha_torneo','fecha'], '');
+    83	  $hora_inicio = saas_tr_first(['hora_inicio','inicio','horaIni'], '');
+    84	  $hora_fin    = saas_tr_first(['hora_fin','fin','horaFin'], '');
+    85	
+    86	  // 6) Guardado
+    87	  if ( $titulo !== '' ) {
+    88	    wp_update_post(['ID'=>$torneo_id, 'post_title'=>wp_strip_all_tags($titulo)]);
+    89	  }
+    90	
+    91	  if ( function_exists('update_field') ) {
+    92	    update_field('descripcion_competicion', wp_kses_post($descripcion), $torneo_id);
+    93	  } else {
+    94	    update_post_meta($torneo_id, 'descripcion_competicion', wp_kses_post($descripcion));
+    95	  }
+    96	
+    97	  $grupo = [
+    98	    'fecha_torneo' => sanitize_text_field($fecha),
+    99	    'hora_inicio'  => sanitize_text_field($hora_inicio),
+   100	    'hora_fin'     => sanitize_text_field($hora_fin),
+   101	  ];
+   102	
+   103	  if ( function_exists('update_field') ) {
+   104	    update_field('tipo_competicion_torneo', $grupo, $torneo_id); // ACF group
+   105	  } else {
+   106	    update_post_meta($torneo_id, 'fecha',       $grupo['fecha_torneo']);
+   107	    update_post_meta($torneo_id, 'hora_inicio', $grupo['hora_inicio']);
+   108	    update_post_meta($torneo_id, 'hora_fin',    $grupo['hora_fin']);
+   109	  }
+   110	
+   111	  do_action('saas_tr/torneo_editado', $torneo_id, $grupo);
+   112	
+   113	  wp_send_json_success([
+   114	    'message' => 'Torneo actualizado',
+   115	    'post_id' => $torneo_id,
+   116	    'data'    => $grupo,
+   117	  ]);
+   118	}

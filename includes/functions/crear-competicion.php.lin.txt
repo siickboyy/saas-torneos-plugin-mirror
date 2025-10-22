@@ -1,0 +1,237 @@
+     1	<?php
+     2	/**
+     3	 * Guardado de competiciones (frontend cliente)
+     4	 * - Lee los campos del formulario estándar.
+     5	 * - (Nuevo) Si llega un snapshot del SIMULADOR, lo persiste en metas
+     6	 *   y crea automáticamente los posts "grupo" hijos de la competición.
+     7	 */
+     8	
+     9	if ( ! defined('ABSPATH') ) { exit; }
+    10	
+    11	/**
+    12	 * Logger de apoyo (escritura en debug-saas-torneos.log)
+    13	 */
+    14	if (!function_exists('str_escribir_log')) {
+    15	    function str_escribir_log($mensaje, $origen = '') {
+    16	        $ruta_log = plugin_dir_path(dirname(__FILE__, 2)) . 'debug-saas-torneos.log';
+    17	        $timestamp = date('[Y-m-d H:i:s]');
+    18	        $origen = $origen ? "[$origen]" : '';
+    19	        if (is_array($mensaje) || is_object($mensaje)) {
+    20	            $mensaje = print_r($mensaje, true);
+    21	        }
+    22	        @file_put_contents($ruta_log, $timestamp . " $origen " . $mensaje . PHP_EOL, FILE_APPEND | LOCK_EX);
+    23	    }
+    24	}
+    25	
+    26	/**
+    27	 * Acción de guardado
+    28	 *
+    29	 * Importante: este handler se invoca desde admin-post.php con action=str_guardar_competicion
+    30	 */
+    31	function str_guardar_competicion_cliente() {
+    32	
+    33	    // Seguridad y permisos
+    34	    if ( !is_user_logged_in() || ( !current_user_can('cliente') && !current_user_can('administrator') ) ) {
+    35	        wp_die('No autorizado');
+    36	    }
+    37	
+    38	    if ( !isset($_POST['str_crear_competicion']) ) {
+    39	        wp_redirect( home_url('/panel-del-cliente') );
+    40	        exit;
+    41	    }
+    42	
+    43	    // Sanitizar campos base del formulario
+    44	    $titulo      = isset($_POST['titulo']) ? sanitize_text_field($_POST['titulo']) : '';
+    45	    $deporte     = isset($_POST['deporte']) ? sanitize_text_field($_POST['deporte']) : '';
+    46	    $tipo        = isset($_POST['tipo_competicion']) ? sanitize_text_field($_POST['tipo_competicion']) : 'Torneo';
+    47	    $categoria   = isset($_POST['categoria']) ? sanitize_text_field($_POST['categoria']) : '';
+    48	    $formato     = isset($_POST['formato_competicion']) ? sanitize_text_field($_POST['formato_competicion']) : '';
+    49	    $sistema     = isset($_POST['sistema_puntuacion']) ? sanitize_text_field($_POST['sistema_puntuacion']) : '';
+    50	    $n_jugadores = isset($_POST['n_jugadores']) ? intval($_POST['n_jugadores']) : 0;
+    51	    $descripcion = isset($_POST['descripcion_competicion']) ? sanitize_textarea_field($_POST['descripcion_competicion']) : '';
+    52	
+    53	    // Crear post de competición
+    54	    $post_id = wp_insert_post([
+    55	        'post_type'   => 'competicion',
+    56	        'post_title'  => $titulo ? $titulo : 'Nueva competición',
+    57	        'post_status' => 'publish',
+    58	        'post_author' => get_current_user_id()
+    59	    ]);
+    60	
+    61	    if ( ! $post_id ) {
+    62	        wp_die('Error al crear la competición.');
+    63	    }
+    64	
+    65	    // Guardado ACF "base"
+    66	    if ( function_exists('update_field') ) {
+    67	        update_field('deporte', $deporte, $post_id);
+    68	        update_field('tipo_competicion', $tipo, $post_id);
+    69	        update_field('categoria', $categoria, $post_id);
+    70	        update_field('formato_competicion', $formato, $post_id);
+    71	        update_field('sistema_puntuacion', $sistema, $post_id);
+    72	        update_field('n_jugadores', $n_jugadores, $post_id);
+    73	        update_field('descripcion_competicion', $descripcion, $post_id);
+    74	    } else {
+    75	        // Fallback a metas normales si ACF no estuviera cargado
+    76	        update_post_meta($post_id, 'deporte', $deporte);
+    77	        update_post_meta($post_id, 'tipo_competicion', $tipo);
+    78	        update_post_meta($post_id, 'categoria', $categoria);
+    79	        update_post_meta($post_id, 'formato_competicion', $formato);
+    80	        update_post_meta($post_id, 'sistema_puntuacion', $sistema);
+    81	        update_post_meta($post_id, 'n_jugadores', $n_jugadores);
+    82	        update_post_meta($post_id, 'descripcion_competicion', $descripcion);
+    83	    }
+    84	
+    85	    // Guardar campos condicionales de Torneo / Ranking (ACF)
+    86	    if ( $tipo === 'Torneo' ) {
+    87	        $fecha_torneo = isset($_POST['fecha_torneo']) ? sanitize_text_field($_POST['fecha_torneo']) : '';
+    88	        $hora_inicio  = isset($_POST['hora_inicio'])  ? sanitize_text_field($_POST['hora_inicio'])  : '';
+    89	        $hora_fin     = isset($_POST['hora_fin'])     ? sanitize_text_field($_POST['hora_fin'])     : '';
+    90	
+    91	        if ( function_exists('update_field') ) {
+    92	            update_field('tipo_competicion_torneo', [
+    93	                'fecha_torneo' => $fecha_torneo,
+    94	                'hora_inicio'  => $hora_inicio,
+    95	                'hora_fin'     => $hora_fin
+    96	            ], $post_id);
+    97	        } else {
+    98	            update_post_meta($post_id, 'fecha_torneo', $fecha_torneo);
+    99	            update_post_meta($post_id, 'hora_inicio', $hora_inicio);
+   100	            update_post_meta($post_id, 'hora_fin', $hora_fin);
+   101	        }
+   102	    }
+   103	
+   104	    if ( $tipo === 'Ranking' ) {
+   105	        $fecha_inicio = isset($_POST['fecha_inicio']) ? sanitize_text_field($_POST['fecha_inicio']) : '';
+   106	        $fecha_fin    = isset($_POST['fecha_fin'])    ? sanitize_text_field($_POST['fecha_fin'])    : '';
+   107	
+   108	        if ( function_exists('update_field') ) {
+   109	            update_field('tipo_competicion_ranking', [
+   110	                'fecha_inicio' => $fecha_inicio,
+   111	                'fecha_fin'    => $fecha_fin
+   112	            ], $post_id);
+   113	        } else {
+   114	            update_post_meta($post_id, 'fecha_inicio', $fecha_inicio);
+   115	            update_post_meta($post_id, 'fecha_fin', $fecha_fin);
+   116	        }
+   117	    }
+   118	
+   119	    /**
+   120	     * ─────────────────────────────────────────────────────────
+   121	     * NUEVO: Lectura del snapshot del SIMULADOR y bootstrap
+   122	     *        de metas + creación de grupos
+   123	     * ─────────────────────────────────────────────────────────
+   124	     */
+   125	    $snapshot_json = null;
+   126	
+   127	    // Aceptamos varias claves por robustez
+   128	    if ( !empty($_POST['sim_snapshot_b64']) ) {
+   129	        $decoded = base64_decode( sanitize_text_field($_POST['sim_snapshot_b64']) );
+   130	        if ($decoded) { $snapshot_json = $decoded; }
+   131	    } elseif ( !empty($_POST['sim_snapshot']) ) {
+   132	        $snapshot_json = wp_unslash($_POST['sim_snapshot']); // puede venir JSON puro
+   133	    } elseif ( !empty($_POST['sim']) ) {
+   134	        // por si llega bajo el mismo nombre que en query
+   135	        $tmp = wp_unslash($_POST['sim']);
+   136	        // si parece base64, intentamos decodificar
+   137	        if ( preg_match('~^[A-Za-z0-9+/=_-]+$~', $tmp) ) {
+   138	            $maybe = base64_decode(strtr($tmp, '-_', '+/'));
+   139	            $snapshot_json = $maybe ? $maybe : $tmp;
+   140	        } else {
+   141	            $snapshot_json = $tmp;
+   142	        }
+   143	    }
+   144	
+   145	    $snapshot = null;
+   146	    if ( $snapshot_json ) {
+   147	        $snapshot = json_decode($snapshot_json, true);
+   148	    }
+   149	
+   150	    // Valores por defecto (por si no llega snapshot)
+   151	    $fase_final_slug     = 'final';
+   152	    $modo_final          = 'premios_grupo'; // o 'mezclar'
+   153	    $n_grupos_sugeridos  = 0;
+   154	    $n_parejas_aprox     = ($n_jugadores > 0) ? max(1, intval($n_jugadores / 2)) : 0;
+   155	
+   156	    if ( is_array($snapshot) ) {
+   157	        // Intentar mapear claves comunes del simulador
+   158	        if ( isset($snapshot['fase_final']) ) {
+   159	            $fase_final_slug = sanitize_key($snapshot['fase_final']); // final|semifinal|cuartos|octavos
+   160	        } elseif ( isset($snapshot['fase_final_slug']) ) {
+   161	            $fase_final_slug = sanitize_key($snapshot['fase_final_slug']);
+   162	        }
+   163	
+   164	        if ( isset($snapshot['modo_final']) ) {
+   165	            // premios_grupo | mezclar
+   166	            $modo_final = ($snapshot['modo_final'] === 'mezclar') ? 'mezclar' : 'premios_grupo';
+   167	        } elseif ( isset($snapshot['cuadro_opcion']) ) {
+   168	            $modo_final = ($snapshot['cuadro_opcion'] === 'mezclar') ? 'mezclar' : 'premios_grupo';
+   169	        }
+   170	
+   171	        if ( isset($snapshot['n_grupos']) ) {
+   172	            $n_grupos_sugeridos = intval($snapshot['n_grupos']);
+   173	        } elseif ( isset($snapshot['n_grupos_sugeridos']) ) {
+   174	            $n_grupos_sugeridos = intval($snapshot['n_grupos_sugeridos']);
+   175	        } elseif ( isset($snapshot['grupos']) && is_array($snapshot['grupos']) ) {
+   176	            $n_grupos_sugeridos = count($snapshot['grupos']);
+   177	        }
+   178	
+   179	        if ( isset($snapshot['n_parejas_calc']) ) {
+   180	            $n_parejas_aprox = intval($snapshot['n_parejas_calc']);
+   181	        }
+   182	
+   183	        // Guardar snapshot crudo para trazabilidad
+   184	        update_post_meta($post_id, 'str_snapshot_sim', wp_json_encode($snapshot, JSON_UNESCAPED_UNICODE));
+   185	    }
+   186	
+   187	    // Persistimos metas que la plantilla torneo.php mostrará en el resumen
+   188	    update_post_meta($post_id, 'str_fase_final_slug',    $fase_final_slug);
+   189	    update_post_meta($post_id, 'str_modo_final',         $modo_final);
+   190	    update_post_meta($post_id, 'str_n_grupos_sugeridos', $n_grupos_sugeridos);
+   191	    update_post_meta($post_id, 'str_n_parejas_aprox',    $n_parejas_aprox);
+   192	
+   193	    // Crear posts "grupo" si tenemos un número sugerido > 0 y aún no existen
+   194	    if ( $n_grupos_sugeridos > 0 ) {
+   195	
+   196	        // ¿Ya hay grupos creados para esta competición?
+   197	        $ya_existen = get_posts([
+   198	            'post_type'      => 'grupo',
+   199	            'posts_per_page' => 1,
+   200	            'post_status'    => 'any',
+   201	            'post_parent'    => $post_id,
+   202	            'fields'         => 'ids',
+   203	        ]);
+   204	
+   205	        if ( empty($ya_existen) ) {
+   206	            $letras = range('A','Z');
+   207	            for ($i = 0; $i < $n_grupos_sugeridos; $i++) {
+   208	                $letra = isset($letras[$i]) ? $letras[$i] : (string)($i+1);
+   209	
+   210	                $grupo_id = wp_insert_post([
+   211	                    'post_type'   => 'grupo',
+   212	                    'post_title'  => 'Grupo ' . $letra,
+   213	                    'post_status' => 'publish',
+   214	                    'post_parent' => $post_id,
+   215	                    'post_author' => get_current_user_id(),
+   216	                ]);
+   217	
+   218	                if ( $grupo_id ) {
+   219	                    // Metas mínimas que usa el JS/AJAX de grupos
+   220	                    update_post_meta($grupo_id, 'letra', $letra);
+   221	                    update_post_meta($grupo_id, 'orden', ($i + 1));
+   222	                    update_post_meta($grupo_id, 'competicion_id', $post_id); // por si algún endpoint usa meta en vez de post_parent
+   223	                }
+   224	            }
+   225	            str_escribir_log("Creación automática de {$n_grupos_sugeridos} grupos para competicion {$post_id}", 'CREAR-COMPETICION');
+   226	        } else {
+   227	            str_escribir_log("Ya existían grupos; no se crean duplicados para competicion {$post_id}", 'CREAR-COMPETICION');
+   228	        }
+   229	    } else {
+   230	        str_escribir_log("No se creó ningún grupo (n_grupos_sugeridos={$n_grupos_sugeridos}) para competicion {$post_id}", 'CREAR-COMPETICION');
+   231	    }
+   232	
+   233	    // Redirección final a la ficha de la competición
+   234	    wp_redirect( get_permalink($post_id) );
+   235	    exit;
+   236	}
+   237	add_action('admin_post_str_guardar_competicion', 'str_guardar_competicion_cliente');

@@ -1,0 +1,99 @@
+     1	<?php
+     2	/**
+     3	 * Shortcode: [formulario_crear_competicion]
+     4	 * Renderiza el formulario de creación de competición en una página pública
+     5	 */
+     6	
+     7	function str_shortcode_formulario_crear_competicion() {
+     8	    if (!is_user_logged_in() || (!current_user_can('cliente') && !current_user_can('administrator'))) {
+     9	        return '<p>Acceso restringido. Debes iniciar sesión como cliente.</p>';
+    10	    }
+    11	
+    12	    ob_start();
+    13	
+    14	    // Log visual para depuración
+    15	    echo '<!-- [STR] Shortcode formulario_crear_competicion ejecutado correctamente -->';
+    16	    ?>
+    17	
+    18	    <div class="str-dashboard-form">
+    19	        <button class="str-btn-cerrar" onclick="window.history.back();">✖</button>
+    20	
+    21	        <h2>Crear nueva competición</h2>
+    22	        <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
+    23	            <input type="hidden" name="action" value="str_guardar_competicion">
+    24	            <input type="hidden" name="str_crear_competicion" value="1">
+    25	
+    26	            <label>Título del torneo</label>
+    27	            <input type="text" name="titulo" required>
+    28	
+    29	            <label>Deporte</label>
+    30	            <select name="deporte" required>
+    31	                <option value="">Selecciona...</option>
+    32	                <option value="Padel">Pádel</option>
+    33	                <option value="Tenis">Tenis</option>
+    34	                <option value="Pickleball">Pickleball</option>
+    35	                <option value="Tenis Playa">Tenis Playa</option>
+    36	            </select>
+    37	
+    38	            <label>Tipo de competición</label>
+    39	            <select name="tipo_competicion" required>
+    40	                <option value="">Selecciona...</option>
+    41	                <option value="Torneo">Torneo</option>
+    42	                <option value="Ranking">Ranking</option>
+    43	            </select>
+    44	
+    45	            <label>Categoría</label>
+    46	            <select name="categoria" required>
+    47	                <option value="">Selecciona...</option>
+    48	                <option value="Masculina">Masculina</option>
+    49	                <option value="Femenina">Femenina</option>
+    50	                <option value="Mixta">Mixta</option>
+    51	            </select>
+    52	
+    53	            <label>Formato</label>
+    54	            <select name="formato_competicion" required>
+    55	                <option value="">Selecciona...</option>
+    56	                <option value="Grupos">Grupos</option>
+    57	                <option value="Grupos + Bracket Final">Grupos + Bracket Final</option>
+    58	            </select>
+    59	
+    60	            <label>Sistema de puntuación</label>
+    61	            <select name="sistema_puntuacion" required>
+    62	                <option value="">Selecciona...</option>
+    63	                <option value="3v-1d">Victoria 3 pts / Derrota 1 pt</option>
+    64	                <option value="3v-0d">Victoria 3 pts / Derrota 0 pts</option>
+    65	            </select>
+    66	
+    67	            <label>Nº de jugadores/parejas</label>
+    68	            <input type="number" name="n_jugadores" min="2" required>
+    69	
+    70	            <label>Descripción</label>
+    71	            <textarea name="descripcion_competicion" rows="3"></textarea>
+    72	
+    73	            <div class="tipo_torneo">
+    74	                <label>Fecha del torneo</label>
+    75	                <input type="date" name="fecha_torneo">
+    76	
+    77	                <label>Hora inicio</label>
+    78	                <input type="time" name="hora_inicio">
+    79	
+    80	                <label>Hora fin</label>
+    81	                <input type="time" name="hora_fin">
+    82	            </div>
+    83	
+    84	            <div class="tipo_ranking">
+    85	                <label>Fecha de inicio</label>
+    86	                <input type="date" name="fecha_inicio">
+    87	
+    88	                <label>Fecha de fin</label>
+    89	                <input type="date" name="fecha_fin">
+    90	            </div>
+    91	
+    92	            <button type="submit" class="str-btn">Crear competición</button>
+    93	        </form>
+    94	    </div>
+    95	
+    96	    <?php
+    97	    return ob_get_clean();
+    98	}
+    99	add_shortcode('formulario_crear_competicion', 'str_shortcode_formulario_crear_competicion');

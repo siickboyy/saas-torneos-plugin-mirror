@@ -1,0 +1,497 @@
+     1	<?php
+     2	/**
+     3	 * AJAX: Simular Torneo (SIEMPRE por parejas)
+     4	 * Ruta: includes/features/simulator/ajax/simular-torneo.php
+     5	 */
+     6	
+     7	if (!defined('ABSPATH')) { exit; }
+     8	
+     9	/**
+    10	 * Logger básico al archivo debug-saas-torneos.log del plugin.
+    11	 */
+    12	if (!function_exists('str_saas_log')) {
+    13	    function str_saas_log($message, $context = []) {
+    14	        $upload_dir = wp_upload_dir();
+    15	        $base = dirname(dirname(__DIR__)); // .../includes -> base del plugin
+    16	        $log_path = trailingslashit($base) . 'debug-saas-torneos.log';
+    17	        if (!is_writable($base)) {
+    18	            $log_path = trailingslashit($upload_dir['basedir']) . 'debug-saas-torneos.log';
+    19	        }
+    20	        $line = '[' . date('Y-m-d H:i:s') . '] ' . (is_string($message) ? $message : wp_json_encode($message, JSON_UNESCAPED_UNICODE));
+    21	        if (!empty($context)) {
+    22	            $line .= ' | ' . wp_json_encode($context, JSON_UNESCAPED_UNICODE);
+    23	        }
+    24	        $line .= PHP_EOL;
+    25	        @file_put_contents($log_path, $line, FILE_APPEND);
+    26	    }
+    27	}
+    28	
+    29	/**
+    30	 * Helpers compartidos (protegidos contra redeclare)
+    31	 */
+    32	if (!function_exists('str_coste_para_grupos')) {
+    33	    /**
+    34	     * Coste para un nº de grupos dado (heurística)
+    35	     */
+    36	    function str_coste_para_grupos($P, $G, $target_size, $es_premios_por_grupo, $fase_final, $plazas_por_fase) {
+    37	        if ($G < 1) return PHP_INT_MAX;
+    38	
+    39	        $base  = intdiv($P, $G);
+    40	        $resto = $P % $G;
+    41	
+    42	        $min_size = $base;
+    43	        $max_size = $base + ($resto > 0 ? 1 : 0);
+    44	
+    45	        // Desviación respecto al objetivo
+    46	        $dev_min = ($min_size - $target_size);
+    47	        $dev_max = ($max_size - $target_size);
+    48	        $cost_tamano = ($G - $resto) * ($dev_min * $dev_min) + $resto * ($dev_max * $dev_max);
+    49	
+    50	        // Penalización por incompatibilidad de fase (solo premios por grupo)
+    51	        $cost_fase = 0;
+    52	        if ($es_premios_por_grupo) {
+    53	            $plazas_req = isset($plazas_por_fase[$fase_final]) ? $plazas_por_fase[$fase_final] : 2;
+    54	            if ($min_size < $plazas_req) {
+    55	                $cost_fase = 100000 * ($plazas_req - $min_size);
+    56	            }
+    57	        }
+    58	
+    59	        // Penalización por grupos demasiado pequeños
+    60	        $cost_tiny = 0;
+    61	        if ($min_size < 3) {
+    62	            $cost_tiny = 200 * (3 - $min_size);
+    63	        }
+    64	
+    65	        // Preferencia ligera por nº de grupos cercanos a 4
+    66	        $pref_g = 4;
+    67	        $cost_pref_g = 2 * (($G - $pref_g) * ($G - $pref_g));
+    68	
+    69	        return $cost_tamano + $cost_fase + $cost_tiny + $cost_pref_g;
+    70	    }
+    71	}
+    72	
+    73	if (!function_exists('str_elegir_num_grupos_optimo')) {
+    74	    /**
+    75	     * Elección del nº de grupos óptimo cuando el cliente no lo fija.
+    76	     */
+    77	    function str_elegir_num_grupos_optimo($P, $es_premios_por_grupo, $fase_final, $plazas_por_fase) {
+    78	        $target_size = 4; // preferencia general
+    79	        $max_candidatos = max(1, min(12, $P));
+    80	        $mejorG = 1;
+    81	        $mejorCoste = PHP_INT_MAX;
+    82	
+    83	        for ($G = 1; $G <= $max_candidatos; $G++) {
+    84	            $coste = str_coste_para_grupos($P, $G, $target_size, $es_premios_por_grupo, $fase_final, $plazas_por_fase);
+    85	            if ($coste < $mejorCoste) {
+    86	                $mejorCoste = $coste;
+    87	                $mejorG = $G;
+    88	            }
+    89	        }
+    90	        return max(1, (int) $mejorG);
+    91	    }
+    92	}
+    93	
+    94	if (!function_exists('generar_mensajes_sugerencias')) {
+    95	    /**
+    96	     * Mensajes educativos / sugerencias informativas
+    97	     */
+    98	    function generar_mensajes_sugerencias($grupos, $fase_final, $org_val) {
+    99	        $total_grupos = count($grupos);
+   100	        $k_min = min(array_map(function($g){ return (int)$g['tam']; }, $grupos));
+   101	        $partidos_min_por_grupo = max(0, $k_min - 1);
+   102	
+   103	        $modo = (strpos(strtolower($org_val), 'grupo') !== false) ? 'Premios por grupo' : 'Mezclar grupos';
+   104	        $fase_txt = ucfirst($fase_final);
+   105	
+   106	        $msg  = '<div class="simulador-msg-sugerencias">';
+   107	        $msg .= '<div class="msg-ok">Distribución realizada: <b>' . esc_html($total_grupos) . ' grupo(s)</b> de parejas. ';
+   108	        $msg .= 'Partidos garantizados por pareja en el grupo más pequeño: <b>' . esc_html($partidos_min_por_grupo) . '</b>.</div>';
+   109	        $msg .= '<div class="msg-warning">Modo de cuadro final: <b>' . esc_html($modo) . '</b> | Fase final: <b>' . esc_html($fase_txt) . '</b>.</div>';
+   110	        $msg .= '</div>';
+   111	
+   112	        return $msg;
+   113	    }
+   114	}
+   115	
+   116	if (!function_exists('render_cuadro_por_grupo')) {
+   117	    /**
+   118	     * Render: cuadro por grupo
+   119	     */
+   120	    function render_cuadro_por_grupo($letra_grupo, $fase_final) {
+   121	        $slots = [];
+   122	        switch ($fase_final) {
+   123	            case 'octavos':
+   124	                $slots = [
+   125	                    ['1º Grupo ' . $letra_grupo, '16º Grupo ' . $letra_grupo],
+   126	                    ['8º Grupo ' . $letra_grupo, '9º Grupo ' . $letra_grupo],
+   127	                    ['5º Grupo ' . $letra_grupo, '12º Grupo ' . $letra_grupo],
+   128	                    ['4º Grupo ' . $letra_grupo, '13º Grupo ' . $letra_grupo],
+   129	                    ['6º Grupo ' . $letra_grupo, '11º Grupo ' . $letra_grupo],
+   130	                    ['3º Grupo ' . $letra_grupo, '14º Grupo ' . $letra_grupo],
+   131	                    ['7º Grupo ' . $letra_grupo, '10º Grupo ' . $letra_grupo],
+   132	                    ['2º Grupo ' . $letra_grupo, '15º Grupo ' . $letra_grupo],
+   133	                ];
+   134	                break;
+   135	            case 'cuartos':
+   136	                $slots = [
+   137	                    ['1º Grupo ' . $letra_grupo, '8º Grupo ' . $letra_grupo],
+   138	                    ['4º Grupo ' . $letra_grupo, '5º Grupo ' . $letra_grupo],
+   139	                    ['3º Grupo ' . $letra_grupo, '6º Grupo ' . $letra_grupo],
+   140	                    ['2º Grupo ' . $letra_grupo, '7º Grupo ' . $letra_grupo],
+   141	                ];
+   142	                break;
+   143	            case 'semifinal':
+   144	                $slots = [
+   145	                    ['1º Grupo ' . $letra_grupo, '4º Grupo ' . $letra_grupo],
+   146	                    ['2º Grupo ' . $letra_grupo, '3º Grupo ' . $letra_grupo],
+   147	                ];
+   148	                break;
+   149	            default: // final
+   150	                $slots = [
+   151	                    ['1º Grupo ' . $letra_grupo, '2º Grupo ' . $letra_grupo],
+   152	                ];
+   153	                break;
+   154	        }
+   155	
+   156	        $html  = '<div class="simulador-cuadro-ronda">';
+   157	        $html .= '<div class="simulador-cuadro-titulo">' . esc_html(ucfirst($fase_final)) . '</div>';
+   158	        $html .= '<div class="simulador-cuadro-matches">';
+   159	        foreach ($slots as $s) {
+   160	            $html .= '<div class="simulador-cuadro-match"><span>' . esc_html($s[0]) . '</span> <b>vs</b> <span>' . esc_html($s[1]) . '</span></div>';
+   161	        }
+   162	        $html .= '</div></div>';
+   163	
+   164	        if ($fase_final === 'cuartos') {
+   165	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Semifinal</div><div class="simulador-cuadro-matches">';
+   166	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF1</span> <b>vs</b> <span>Ganador QF2</span></div>';
+   167	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF3</span> <b>vs</b> <span>Ganador QF4</span></div>';
+   168	            $html .= '</div></div>';
+   169	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Final</div><div class="simulador-cuadro-matches">';
+   170	            $html .= '<div class="simulador-cuadro-match"><span>Ganador SF1</span> <b>vs</b> <span>Ganador SF2</span></div>';
+   171	            $html .= '</div></div>';
+   172	        } elseif ($fase_final === 'semifinal') {
+   173	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Final</div><div class="simulador-cuadro-matches">';
+   174	            $html .= '<div class="simulador-cuadro-match"><span>Ganador SF1</span> <b>vs</b> <span>Ganador SF2</span></div>';
+   175	            $html .= '</div></div>';
+   176	        } elseif ($fase_final === 'octavos') {
+   177	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Cuartos</div><div class="simulador-cuadro-matches">';
+   178	            $html .= '<div class="simulador-cuadro-match"><span>Ganador R16-1</span> <b>vs</b> <span>Ganador R16-2</span></div>';
+   179	            $html .= '<div class="simulador-cuadro-match"><span>Ganador R16-3</span> <b>vs</b> <span>Ganador R16-4</span></div>';
+   180	            $html .= '<div class="simulador-cuadro-match"><span>Ganador R16-5</span> <b>vs</b> <span>Ganador R16-6</span></div>';
+   181	            $html .= '<div class="simulador-cuadro-match"><span>Ganador R16-7</span> <b>vs</b> <span>Ganador R16-8</span></div>';
+   182	            $html .= '</div></div>';
+   183	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Semifinal</div><div class="simulador-cuadro-matches">';
+   184	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF1</span> <b>vs</b> <span>Ganador QF2</span></div>';
+   185	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF3</span> <b>vs</b> <span>Ganador QF4</span></div>';
+   186	            $html .= '</div></div>';
+   187	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Final</div><div class="simulador-cuadro-matches">';
+   188	            $html .= '<div class="simulador-cuadro-match"><span>Ganador SF1</span> <b>vs</b> <span>Ganador SF2</span></div>';
+   189	            $html .= '</div></div>';
+   190	        }
+   191	
+   192	        return $html;
+   193	    }
+   194	}
+   195	
+   196	if (!function_exists('render_cuadro_mezclado')) {
+   197	    /**
+   198	     * Render: Cuadro mezclado (simplificado)
+   199	     */
+   200	    function render_cuadro_mezclado($grupos, $fase_final) {
+   201	        $slots = [];
+   202	        switch ($fase_final) {
+   203	            case 'cuartos':
+   204	                $slots = [
+   205	                    ['1º Grupo A', '2º Grupo B'],
+   206	                    ['1º Grupo C', '2º Grupo D'],
+   207	                    ['1º Grupo B', '2º Grupo A'],
+   208	                    ['1º Grupo D', '2º Grupo C'],
+   209	                ];
+   210	                break;
+   211	            case 'semifinal':
+   212	                $slots = [
+   213	                    ['1º Grupo A', '2º Grupo B'],
+   214	                    ['1º Grupo C', '2º Grupo D'],
+   215	                ];
+   216	                break;
+   217	            default:
+   218	                $slots = [
+   219	                    ['1º Grupo A', '1º Grupo B'],
+   220	                ];
+   221	                break;
+   222	        }
+   223	
+   224	        $html  = '<div class="simulador-cuadro-ronda">';
+   225	        $html .= '<div class="simulador-cuadro-titulo">' . esc_html(ucfirst($fase_final)) . '</div>';
+   226	        $html .= '<div class="simulador-cuadro-matches">';
+   227	        foreach ($slots as $s) {
+   228	            $html .= '<div class="simulador-cuadro-match"><span>' . esc_html($s[0]) . '</span> <b>vs</b> <span>' . esc_html($s[1]) . '</span></div>';
+   229	        }
+   230	        $html .= '</div></div>';
+   231	
+   232	        if ($fase_final === 'cuartos') {
+   233	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Semifinal</div><div class="simulador-cuadro-matches">';
+   234	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF1</span> <b>vs</b> <span>Ganador QF2</span></div>';
+   235	            $html .= '<div class="simulador-cuadro-match"><span>Ganador QF3</span> <b>vs</b> <span>Ganador QF4</span></div>';
+   236	            $html .= '</div></div>';
+   237	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Final</div><div class="simulador-cuadro-matches">';
+   238	            $html .= '<div class="simulador-cuadro-match"><span>Ganador SF1</span> <b>vs</b> <span>Ganador SF2</span></div>';
+   239	            $html .= '</div></div>';
+   240	        } elseif ($fase_final === 'semifinal') {
+   241	            $html .= '<div class="simulador-cuadro-ronda"><div class="simulador-cuadro-titulo">Final</div><div class="simulador-cuadro-matches">';
+   242	            $html .= '<div class="simulador-cuadro-match"><span>Ganador SF1</span> <b>vs</b> <span>Ganador SF2</span></div>';
+   243	            $html .= '</div></div>';
+   244	        }
+   245	
+   246	        return $html;
+   247	    }
+   248	}
+   249	
+   250	if (!function_exists('generar_resultados_html')) {
+   251	    /**
+   252	     * Generación de HTML de resultados (grupos + cuadro final)
+   253	     */
+   254	    function generar_resultados_html($grupos, $fase_final, $org_val) {
+   255	        $es_premios_por_grupo = (strpos(strtolower($org_val), 'grupo') !== false);
+   256	
+   257	        $html = '<div class="simulador-visual-wrap">';
+   258	
+   259	        // Bloque: Grupos (lista)
+   260	        $html .= '<div class="simulador-grupos-lista">';
+   261	        foreach ($grupos as $g) {
+   262	            $html .= '<div class="simulador-grupo-bloque">';
+   263	            $html .= '<div class="simulador-grupo-nombre">Grupo ' . esc_html($g['nombre']) . '</div>';
+   264	            $html .= '<ul>';
+   265	            $top_n = 0;
+   266	            switch ($fase_final) {
+   267	                case 'octavos':   $top_n = 16; break;
+   268	                case 'cuartos':   $top_n = 8;  break;
+   269	                case 'semifinal': $top_n = 4;  break;
+   270	                default:          $top_n = 2;  break;
+   271	            }
+   272	            foreach ($g['participantes'] as $idx => $name) {
+   273	                $class = ($idx < $top_n) ? ' class="simulador-clasificado"' : '';
+   274	                $html .= '<li' . $class . '>' . esc_html($name) . '</li>';
+   275	            }
+   276	            $garantizados = max(0, $g['tam'] - 1);
+   277	            $html .= '</ul><div class="simulador-grupo-info">Partidos garantizados por pareja: ' . esc_html((string)$garantizados) . '</div>';
+   278	            $html .= '</div>';
+   279	        }
+   280	        $html .= '</div>'; // .simulador-grupos-lista
+   281	
+   282	        // Bloque: Cuadro(s) final(es)
+   283	        $html .= '<div class="simulador-cuadro-final">';
+   284	        if ($es_premios_por_grupo) {
+   285	            $html .= '<h3>Cuadros finales por grupo</h3>';
+   286	            foreach ($grupos as $g) {
+   287	                $html .= '<div class="simulador-cuadro-grupo">';
+   288	                $html .= '<div class="simulador-cuadro-grupo-titulo">Grupo ' . esc_html($g['nombre']) . '</div>';
+   289	                $html .= render_cuadro_por_grupo($g['nombre'], $fase_final);
+   290	                $html .= '</div>';
+   291	            }
+   292	        } else {
+   293	            $html .= '<h3>Cuadro final (mezcla de grupos)</h3>';
+   294	            $html .= render_cuadro_mezclado($grupos, $fase_final);
+   295	        }
+   296	        $html .= '</div>'; // .simulador-cuadro-final
+   297	
+   298	        $html .= '</div>'; // .simulador-visual-wrap
+   299	
+   300	        return $html;
+   301	    }
+   302	}
+   303	
+   304	/**
+   305	 * Hooks AJAX
+   306	 */
+   307	add_action('wp_ajax_str_simular_torneo', 'str_simular_torneo');
+   308	// add_action('wp_ajax_nopriv_str_simular_torneo', 'str_simular_torneo'); // si quieres público
+   309	
+   310	/**
+   311	 * Handler principal (SIEMPRE por parejas)
+   312	 */
+   313	if (!function_exists('str_simular_torneo')) {
+   314	function str_simular_torneo() {
+   315	    try {
+   316	        // Seguridad básica
+   317	        if (!is_user_logged_in()) {
+   318	            wp_send_json_error(['msg' => 'Permisos insuficientes (login requerido).'], 403);
+   319	        }
+   320	        if (!isset($_POST['_ajax_nonce']) || !wp_verify_nonce(sanitize_text_field($_POST['_ajax_nonce']), 'str_nonce')) {
+   321	            wp_send_json_error(['msg' => 'Nonce inválido. Recarga la página.'], 400);
+   322	        }
+   323	        if (!current_user_can('read')) {
+   324	            wp_send_json_error(['msg' => 'Permisos insuficientes.'], 403);
+   325	        }
+   326	
+   327	        // Entrada (sin tipo_torneo / sin n_pistas)
+   328	        $n_jugadores     = isset($_POST['n_jugadores']) ? absint($_POST['n_jugadores']) : 0;
+   329	        $n_grupos_input  = isset($_POST['n_grupos'])    ? absint($_POST['n_grupos'])    : 0;
+   330	        $fase_final_raw  = isset($_POST['fase_final'])  ? sanitize_text_field($_POST['fase_final']) : 'final';
+   331	        $organizar_final = isset($_POST['organizar_final']) ? sanitize_text_field($_POST['organizar_final']) : 'premios_grupo';
+   332	
+   333	        $fase_final  = strtolower($fase_final_raw);         // 'final' | 'semifinal' | 'cuartos' | 'octavos'
+   334	        $org_val     = strtolower($organizar_final);        // 'premios_grupo' | 'mezclar' | ...
+   335	
+   336	        if ($n_jugadores < 2) {
+   337	            wp_send_json_error(['msg' => 'Introduce un número de jugadores válido (mínimo 2).'], 400);
+   338	        }
+   339	
+   340	        // Participantes competitivos (SIEMPRE por parejas)
+   341	        $P = (int) floor($n_jugadores / 2);
+   342	        if ($P < 2) {
+   343	            wp_send_json_error(['msg' => 'No hay suficientes parejas para simular.'], 400);
+   344	        }
+   345	
+   346	        // Plazas por fase
+   347	        $plazas_por_fase = [
+   348	            'final'     => 2,
+   349	            'semifinal' => 4,
+   350	            'cuartos'   => 8,
+   351	            'octavos'   => 16,
+   352	        ];
+   353	        $plazas_requeridas = isset($plazas_por_fase[$fase_final]) ? $plazas_por_fase[$fase_final] : 2;
+   354	
+   355	        // Premios por grupo o mezclar
+   356	        $es_premios_por_grupo = (strpos($org_val, 'grupo') !== false || $org_val === 'premios' || $org_val === 'premios_grupo');
+   357	
+   358	        // Elegir nº de grupos:
+   359	        if ($n_grupos_input > 0) {
+   360	            $n_grupos = max(1, $n_grupos_input);
+   361	            $modo_grupos = 'fijo_cliente';
+   362	        } else {
+   363	            $n_grupos = str_elegir_num_grupos_optimo($P, $es_premios_por_grupo, $fase_final, $plazas_por_fase);
+   364	            $modo_grupos = 'auto_optimo';
+   365	        }
+   366	
+   367	        // Reparto equilibrado base+resto
+   368	        $base   = intdiv($P, $n_grupos);
+   369	        $resto  = $P % $n_grupos;
+   370	        $letras = range('A', 'Z');
+   371	        $grupos = [];
+   372	        $indice = 1;
+   373	
+   374	        for ($i = 0; $i < $n_grupos; $i++) {
+   375	            $tam = $base + ($i < $resto ? 1 : 0);
+   376	            $nombre = isset($letras[$i]) ? $letras[$i] : 'G' . ($i + 1);
+   377	            $participantes = [];
+   378	            for ($p = 0; $p < $tam; $p++) {
+   379	                $participantes[] = "Pareja {$indice}";
+   380	                $indice++;
+   381	            }
+   382	            $grupos[] = [
+   383	                'nombre' => $nombre,
+   384	                'tam' => $tam,
+   385	                'participantes' => $participantes,
+   386	            ];
+   387	        }
+   388	
+   389	        // Tamaño mínimo por grupo
+   390	        $tam_min_grupo = min(array_map(function($g){ return (int) $g['tam']; }, $grupos));
+   391	
+   392	        str_saas_log('SIMULADOR entrada/selección G (parejas)', [
+   393	            'P' => $P,
+   394	            'fase' => $fase_final,
+   395	            'organizar_final' => $org_val,
+   396	            'n_grupos_input' => $n_grupos_input,
+   397	            'n_grupos_usado' => $n_grupos,
+   398	            'modo_grupos' => $modo_grupos,
+   399	            'tam_min_grupo' => $tam_min_grupo,
+   400	        ]);
+   401	
+   402	        // Si es premios por grupo e incompatible => aviso con CTAs
+   403	        if ($es_premios_por_grupo && $plazas_requeridas > $tam_min_grupo) {
+   404	            // Fase compatible por tamaño mínimo actual
+   405	            $fase_compatible = 'final';
+   406	            if ($tam_min_grupo >= 16)      $fase_compatible = 'octavos';
+   407	            elseif ($tam_min_grupo >= 8)   $fase_compatible = 'cuartos';
+   408	            elseif ($tam_min_grupo >= 4)   $fase_compatible = 'semifinal';
+   409	
+   410	            // Nº de grupos recomendado que haría compatible la fase elegida
+   411	            $n_grupos_recomendado = str_recomendar_grupos_compatibles($P, $fase_final, $plazas_por_fase);
+   412	
+   413	            // Mensaje
+   414	            $titulo = '<div class="simulador-msg-sugerencias"><div class="msg-warning" style="font-weight:700;margin-bottom:6px;">⚠ No hay suficientes parejas por grupo para la fase final seleccionada.</div>';
+   415	            $detalle  = '<div style="margin-bottom:8px;">Has elegido <b>Premios por grupo</b> con la fase final <b>' . esc_html(ucfirst($fase_final)) . '</b>. ';
+   416	            $detalle .= 'Con <b>' . esc_html($n_grupos) . ' grupo(s)</b> y un mínimo de <b>' . esc_html($tam_min_grupo) . '</b> pareja(s) en el grupo más pequeño, ';
+   417	            $detalle .= 'la fase máxima posible por grupo es <b>' . esc_html(ucfirst($fase_compatible)) . '</b>.</div>';
+   418	
+   419	            $acciones = '<div style="margin-top:10px;">';
+   420	            $acciones .= '<div style="margin-bottom:8px;">Para mantener <b>' . esc_html(ucfirst($fase_final)) . '</b> por grupo, cada grupo necesita <b>al menos ' . esc_html($plazas_requeridas) . '</b> parejas.</div>';
+   421	            $acciones .= '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+   422	
+   423	            // Añadir participantes
+   424	            $acciones .= '<button type="button" class="str-btn-ajustar-jugadores" data-min-por-grupo="' . esc_attr($plazas_requeridas) . '" data-g-efectivo="' . esc_attr($n_grupos) . '" style="padding:8px 12px;border:1px solid #2152ff;border-radius:8px;background:#f1f6ff;cursor:pointer;">📈 Añadir participantes y simular de nuevo</button>';
+   425	
+   426	            // Cambiar a fase compatible
+   427	            $acciones .= '<button type="button" class="str-btn-ajustar-fase" data-fase-compatible="' . esc_attr($fase_compatible) . '" style="padding:8px 12px;border:1px solid #15803d;border-radius:8px;background:#ecfdf5;cursor:pointer;">🔄 Cambiar a ' . esc_html(ucfirst($fase_compatible)) . ' y simular</button>';
+   428	
+   429	            // Ajustar nº de grupos recomendado
+   430	            if ($n_grupos_recomendado !== $n_grupos) {
+   431	                $acciones .= '<button type="button" class="str-btn-ajustar-grupos" data-grupos-recomendados="' . esc_attr($n_grupos_recomendado) . '" style="padding:8px 12px;border:1px solid #8b5cf6;border-radius:8px;background:#f5f3ff;cursor:pointer;">🧩 Ajustar a ' . esc_html($n_grupos_recomendado) . ' grupo(s) y simular</button>';
+   432	            }
+   433	
+   434	            $acciones .= '</div></div></div>';
+   435	
+   436	            $sugerencias_html = $titulo . $detalle . $acciones;
+   437	
+   438	            str_saas_log('SIMULADOR incompatibilidad (premios por grupo)', [
+   439	                'fase_elegida' => $fase_final,
+   440	                'tam_min_grupo' => $tam_min_grupo,
+   441	                'n_grupos_actual' => $n_grupos,
+   442	                'n_grupos_recomendado' => $n_grupos_recomendado,
+   443	                'fase_compatible' => $fase_compatible,
+   444	            ]);
+   445	
+   446	            wp_send_json_success([
+   447	                'sugerencias'      => $sugerencias_html,
+   448	                'resultados_html'  => '',
+   449	                'n_grupos_actual'      => $n_grupos,
+   450	                'n_grupos_recomendado' => $n_grupos_recomendado,
+   451	            ]);
+   452	        }
+   453	
+   454	        // Compatible o modo "mezclar grupos": generar resultados
+   455	        if (!function_exists('str_recomendar_grupos_compatibles')) {
+   456	            // Garantizamos que existe si se llamara por error aquí (no debería, ya que se usa antes)
+   457	            function str_recomendar_grupos_compatibles($P, $fase_final, $plazas_por_fase) {
+   458	                $plazas_req = isset($plazas_por_fase[$fase_final]) ? $plazas_por_fase[$fase_final] : 2;
+   459	                $max_grupos_compatibles = max(1, (int) floor($P / $plazas_req));
+   460	                $target_size = 4; $mejorG = 1; $mejorCoste = PHP_INT_MAX;
+   461	                for ($G = 1; $G <= $max_grupos_compatibles; $G++) {
+   462	                    $base  = intdiv($P, $G);
+   463	                    $resto = $P % $G;
+   464	                    $min_size = $base;
+   465	                    $max_size = $base + ($resto > 0 ? 1 : 0);
+   466	                    $dev_min = ($min_size - $target_size);
+   467	                    $dev_max = ($max_size - $target_size);
+   468	                    $cost_tamano = ($G - $resto) * ($dev_min * $dev_min) + $resto * ($dev_max * $dev_max);
+   469	                    $cost_tiny = ($min_size < 3) ? 200 * (3 - $min_size) : 0;
+   470	                    $pref_g = 4; $cost_pref_g = 2 * (($G - $pref_g) * ($G - $pref_g));
+   471	                    $coste = $cost_tamano + $cost_tiny + $cost_pref_g;
+   472	                    if ($coste < $mejorCoste) { $mejorCoste = $coste; $mejorG = $G; }
+   473	                }
+   474	                return max(1, (int) $mejorG);
+   475	            }
+   476	        }
+   477	
+   478	        $sugerencias_html = generar_mensajes_sugerencias($grupos, $fase_final, $org_val);
+   479	        $resultados_html  = generar_resultados_html($grupos, $fase_final, $org_val);
+   480	
+   481	        str_saas_log('SIMULADOR generación completada', [
+   482	            'n_grupos' => $n_grupos,
+   483	            'len_sugerencias' => strlen($sugerencias_html),
+   484	            'len_resultados'  => strlen($resultados_html),
+   485	        ]);
+   486	
+   487	        wp_send_json_success([
+   488	            'sugerencias'     => $sugerencias_html,
+   489	            'resultados_html' => $resultados_html,
+   490	            'n_grupos_actual' => $n_grupos,
+   491	        ]);
+   492	
+   493	    } catch (\Throwable $e) {
+   494	        str_saas_log('SIMULADOR excepción', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+   495	        wp_send_json_error(['msg' => 'Error interno en la simulación.'], 500);
+   496	    }
+   497	}}

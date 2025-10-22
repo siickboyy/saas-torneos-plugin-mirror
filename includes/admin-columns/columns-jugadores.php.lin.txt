@@ -1,0 +1,88 @@
+     1	<?php
+     2	/**
+     3	 * Personalización de columnas y filtros para el CPT "jugador_deportes"
+     4	 * Ruta: /saas-torneos-de-raqueta/includes/admin-columns/columns-jugadores.php
+     5	 */
+     6	
+     7	// SOLO en admin y para el CPT correcto
+     8	add_action('admin_init', function() {
+     9	    $screen = get_current_screen();
+    10	    if (is_admin() && isset($_GET['post_type']) && $_GET['post_type'] === 'jugador_deportes') {
+    11	        add_filter('manage_jugador_deportes_posts_columns', 'str_add_columns_jugadores');
+    12	        add_action('manage_jugador_deportes_posts_custom_column', 'str_show_columns_jugadores', 10, 2);
+    13	        add_filter('manage_edit-jugador_deportes_sortable_columns', 'str_sortable_columns_jugadores');
+    14	        add_action('restrict_manage_posts', 'str_filter_columns_jugadores');
+    15	        add_filter('parse_query', 'str_columns_jugadores_filter_query');
+    16	    }
+    17	});
+    18	
+    19	/**
+    20	 * Añade las nuevas columnas al listado del CPT jugador_deportes.
+    21	 * Título va primero, ID como segunda columna.
+    22	 */
+    23	function str_add_columns_jugadores($columns) {
+    24	    $new_columns = array();
+    25	
+    26	    $new_columns['title'] = __('Título');
+    27	    $new_columns['id'] = 'ID';
+    28	    $new_columns['usuario_creador'] = __('Usuario creador');
+    29	    $new_columns['date'] = $columns['date'];
+    30	    return $new_columns;
+    31	}
+    32	
+    33	/**
+    34	 * Muestra el contenido de cada columna personalizada.
+    35	 */
+    36	function str_show_columns_jugadores($column, $post_id) {
+    37	    switch ($column) {
+    38	        case 'id':
+    39	            echo esc_html($post_id);
+    40	            break;
+    41	        case 'usuario_creador':
+    42	            $user_id = get_post_field('post_author', $post_id);
+    43	            $user = get_userdata($user_id);
+    44	            echo $user ? esc_html($user->display_name) : '-';
+    45	            break;
+    46	    }
+    47	}
+    48	
+    49	/**
+    50	 * Hace las columnas ordenables (opcional).
+    51	 */
+    52	function str_sortable_columns_jugadores($columns) {
+    53	    $columns['id'] = 'ID';
+    54	    $columns['usuario_creador'] = 'author';
+    55	    return $columns;
+    56	}
+    57	
+    58	/**
+    59	 * Filtros arriba de la tabla de jugadores.
+    60	 */
+    61	function str_filter_columns_jugadores() {
+    62	    global $typenow;
+    63	    if ($typenow !== 'jugador_deportes') return;
+    64	
+    65	    // Filtro por usuario creador
+    66	    wp_dropdown_users(array(
+    67	        'show_option_all' => 'Todos los usuarios',
+    68	        'name' => 'admin_jugador_user',
+    69	        'selected' => isset($_GET['admin_jugador_user']) ? intval($_GET['admin_jugador_user']) : 0,
+    70	        'include_selected' => true,
+    71	        'who' => 'authors'
+    72	    ));
+    73	
+    74	    // No hay filtro por fecha aquí, ya que WordPress ya lo ofrece por defecto (arriba: "Todas las fechas")
+    75	}
+    76	
+    77	/**
+    78	 * Lógica de filtrado según los dropdowns.
+    79	 */
+    80	function str_columns_jugadores_filter_query($query) {
+    81	    global $pagenow, $typenow;
+    82	    if ($pagenow === 'edit.php' && $typenow === 'jugador_deportes' && $query->is_main_query()) {
+    83	        // Filtrar por usuario
+    84	        if (!empty($_GET['admin_jugador_user'])) {
+    85	            $query->set('author', intval($_GET['admin_jugador_user']));
+    86	        }
+    87	    }
+    88	}

@@ -1,0 +1,349 @@
+     1	<?php
+     2	// /includes/features/groups/ajax/manage.php
+     3	defined('ABSPATH') || exit;
+     4	
+     5	/**
+     6	 * Utilidades pequeñas
+     7	 */
+     8	if (!function_exists('str_escribir_log')) {
+     9	    function str_escribir_log($mensaje, $origen = 'GRUPOS') {
+    10	        $ruta = defined('STR_PLUGIN_PATH') ? STR_PLUGIN_PATH . 'debug-saas-torneos.log' : __DIR__ . '/debug-saas-torneos.log';
+    11	        if (!is_string($mensaje)) { $mensaje = print_r($mensaje, true); }
+    12	        @file_put_contents($ruta, sprintf("[%s] [%s] %s\n", date('Y-m-d H:i:s'), $origen, $mensaje), FILE_APPEND | LOCK_EX);
+    13	    }
+    14	}
+    15	
+    16	function str_groups_json_ok($data = []) {
+    17	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    18	    wp_send_json_success($data);
+    19	}
+    20	function str_groups_json_error($data = [], $code = 400) {
+    21	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    22	    wp_send_json_error($data, $code);
+    23	}
+    24	
+    25	function str_groups_require_caps() {
+    26	    if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    27	        str_groups_json_error(['message' => 'Permisos insuficientes.'], 403);
+    28	    }
+    29	}
+    30	
+    31	function str_groups_check_nonce() {
+    32	    $nonce = isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce'])
+    33	            : (isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '');
+    34	    if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    35	        str_groups_json_error(['message' => 'Nonce inválido.'], 401);
+    36	    }
+    37	}
+    38	
+    39	/** Normaliza un campo relación (id/s, objetos) a array de IDs int */
+    40	function str_groups_normalize_ids($raw) {
+    41	    if (empty($raw)) return [];
+    42	    $out = [];
+    43	    if (is_array($raw)) {
+    44	        foreach ($raw as $item) {
+    45	            if (is_numeric($item)) $out[] = (int)$item;
+    46	            elseif (is_object($item) && isset($item->ID)) $out[] = (int)$item->ID;
+    47	            elseif (is_array($item) && isset($item['ID'])) $out[] = (int)$item['ID'];
+    48	        }
+    49	    } elseif (is_numeric($raw)) {
+    50	        $out[] = (int)$raw;
+    51	    } elseif (is_object($raw) && isset($raw->ID)) {
+    52	        $out[] = (int)$raw->ID;
+    53	    }
+    54	    return array_values(array_unique(array_filter($out)));
+    55	}
+    56	
+    57	/** Devuelve letras libres A..Z para autogenerar nombre de grupo */
+    58	function str_groups_next_letter($comp_id) {
+    59	    $ids = get_posts([
+    60	        'post_type'      => 'grupo',
+    61	        'post_status'    => 'publish',
+    62	        'posts_per_page' => -1,
+    63	        'meta_query'     => [[
+    64	            'key'     => 'torneo_asociado',
+    65	            'value'   => '"' . (int)$comp_id . '"',
+    66	            'compare' => 'LIKE',
+    67	        ]],
+    68	        'fields' => 'ids',
+    69	    ]);
+    70	    $usadas = [];
+    71	    foreach ($ids as $gid) {
+    72	        $n = function_exists('get_field') ? get_field('nombre_grupo', $gid) : get_post_meta($gid, 'nombre_grupo', true);
+    73	        if (!$n) {
+    74	            $t = get_the_title($gid);
+    75	            if (preg_match('~grupo\s+([A-Z0-9]+)~i', (string)$t, $m)) $n = strtoupper($m[1]);
+    76	        }
+    77	        if ($n) $usadas[] = strtoupper(trim($n));
+    78	    }
+    79	    $usadas = array_unique($usadas);
+    80	
+    81	    foreach (range('A','Z') as $L) if (!in_array($L, $usadas, true)) return $L;
+    82	    for ($i=1; $i<=99; $i++) if (!in_array((string)$i, $usadas, true)) return (string)$i;
+    83	    return wp_generate_password(4, false);
+    84	}
+    85	
+    86	/** Valida que la pareja pertenece al torneo (campo ACF torneo_asociado) */
+    87	function str_groups_pair_belongs_to_comp($pareja_id, $comp_id) {
+    88	    $raw = function_exists('get_field') ? get_field('torneo_asociado', $pareja_id) : get_post_meta($pareja_id, 'torneo_asociado', true);
+    89	    $ids = str_groups_normalize_ids($raw);
+    90	    return in_array((int)$comp_id, $ids, true);
+    91	}
+    92	
+    93	/** Comprueba que el grupo pertenece al torneo */
+    94	function str_groups_group_belongs_to_comp($grupo_id, $comp_id) {
+    95	    $raw = function_exists('get_field') ? get_field('torneo_asociado', $grupo_id) : get_post_meta($grupo_id, 'torneo_asociado', true);
+    96	    $ids = str_groups_normalize_ids($raw);
+    97	    return in_array((int)$comp_id, $ids, true);
+    98	}
+    99	
+   100	/**
+   101	 * ==============  ACCIONES AJAX
+   102	 */
+   103	add_action('wp_ajax_saas_grupo_crear',    'saas_grupo_crear');
+   104	add_action('wp_ajax_saas_grupo_asignar',  'saas_grupo_asignar');
+   105	add_action('wp_ajax_saas_grupo_quitar',   'saas_grupo_quitar');
+   106	// Alias compat
+   107	add_action('wp_ajax_str_grupo_crear',           'saas_grupo_crear');
+   108	add_action('wp_ajax_str_grupo_asignar',         'saas_grupo_asignar');
+   109	add_action('wp_ajax_str_grupo_quitar',          'saas_grupo_quitar');
+   110	add_action('wp_ajax_str_grupo_asignar_pareja',  'saas_grupo_asignar');
+   111	add_action('wp_ajax_str_grupo_quitar_pareja',   'saas_grupo_quitar');
+   112	// Eliminar grupo (core + alias)
+   113	add_action('wp_ajax_saas_grupo_eliminar', 'saas_grupo_eliminar');
+   114	add_action('wp_ajax_str_grupo_eliminar',  'saas_grupo_eliminar');
+   115	// Distribución (core + alias)
+   116	add_action('wp_ajax_saas_grupos_distribucion_preview', 'saas_grupos_distribucion_preview');
+   117	add_action('wp_ajax_saas_grupos_distribucion_aplicar', 'saas_grupos_distribucion_aplicar');
+   118	add_action('wp_ajax_str_grupos_distribucion_preview', 'saas_grupos_distribucion_preview');
+   119	add_action('wp_ajax_str_grupos_distribucion_aplicar', 'saas_grupos_distribucion_aplicar');
+   120	
+   121	/** Crear un grupo */
+   122	function saas_grupo_crear() {
+   123	    str_groups_check_nonce();
+   124	    str_groups_require_caps();
+   125	
+   126	    $comp_id = isset($_POST['competicion_id']) ? (int)$_POST['competicion_id'] : 0;
+   127	    $nombre  = isset($_POST['nombre']) ? sanitize_text_field($_POST['nombre']) : '';
+   128	
+   129	    if (!$comp_id || get_post_type($comp_id) !== 'competicion') {
+   130	        str_groups_json_error(['message' => 'Competición inválida.']);
+   131	    }
+   132	
+   133	    if ($nombre === '' || $nombre === null) $nombre = str_groups_next_letter($comp_id);
+   134	
+   135	    $nombre_field = $nombre;
+   136	    if (preg_match('~^\s*grupo\s+~i', $nombre)) {
+   137	        $title = trim($nombre);
+   138	        if (preg_match('~^\s*grupo\s+(.+)$~i', $nombre, $m)) $nombre_field = trim($m[1]);
+   139	    } else {
+   140	        $title = 'Grupo ' . trim($nombre);
+   141	    }
+   142	
+   143	    $post_id = wp_insert_post([
+   144	        'post_type'   => 'grupo',
+   145	        'post_status' => 'publish',
+   146	        'post_title'  => $title,
+   147	        'post_author' => get_current_user_id(),
+   148	    ], true);
+   149	
+   150	    if (is_wp_error($post_id) || !$post_id) {
+   151	        str_escribir_log('[GRUPOS:CREAR][ERROR] ' . (is_wp_error($post_id) ? $post_id->get_error_message() : 'ID=0'));
+   152	        str_groups_json_error(['message' => 'No se pudo crear el grupo.']);
+   153	    }
+   154	
+   155	    if (function_exists('update_field')) {
+   156	        update_field('torneo_asociado', array($comp_id), $post_id);
+   157	        update_field('nombre_grupo', $nombre_field, $post_id);
+   158	        update_field('participantes_grupo', [], $post_id);
+   159	    } else {
+   160	        update_post_meta($post_id, 'torneo_asociado', array($comp_id));
+   161	        update_post_meta($post_id, 'nombre_grupo', $nombre_field);
+   162	        update_post_meta($post_id, 'participantes_grupo', []);
+   163	    }
+   164	
+   165	    str_groups_json_ok([
+   166	        'message' => 'Grupo creado.',
+   167	        'grupo'   => [
+   168	            'id'      => $post_id,
+   169	            'title'   => get_the_title($post_id),
+   170	            'nombre'  => $nombre_field,
+   171	            'comp'    => $comp_id,
+   172	            'miembros'=> [],
+   173	        ]
+   174	    ]);
+   175	}
+   176	
+   177	/** Asignar pareja */
+   178	function saas_grupo_asignar() {
+   179	    str_groups_check_nonce();
+   180	    str_groups_require_caps();
+   181	
+   182	    $comp_id   = isset($_POST['competicion_id']) ? (int)$_POST['competicion_id'] : 0;
+   183	    $grupo_id  = isset($_POST['grupo_id']) ? (int)$_POST['grupo_id'] : 0;
+   184	    $pareja_id = isset($_POST['pareja_id']) ? (int)$_POST['pareja_id'] : 0;
+   185	
+   186	    if (!$comp_id || !$grupo_id || !$pareja_id) {
+   187	        str_groups_json_error(['message' => 'Datos incompletos.']);
+   188	    }
+   189	    if (get_post_type($grupo_id) !== 'grupo' || get_post_status($grupo_id) !== 'publish') {
+   190	        str_groups_json_error(['message' => 'Grupo inválido.']);
+   191	    }
+   192	    if (get_post_type($pareja_id) !== 'pareja' || get_post_status($pareja_id) !== 'publish') {
+   193	        if (get_post_type($pareja_id) !== 'jugador_deportes') {
+   194	            str_groups_json_error(['message' => 'Pareja/Jugador inválido.']);
+   195	        }
+   196	    }
+   197	    if (!str_groups_group_belongs_to_comp($grupo_id, $comp_id)) {
+   198	        str_groups_json_error(['message' => 'El grupo no pertenece a esta competición.']);
+   199	    }
+   200	    if (get_post_type($pareja_id) === 'pareja' && !str_groups_pair_belongs_to_comp($pareja_id, $comp_id)) {
+   201	        str_groups_json_error(['message' => 'La pareja no está asociada a este torneo.']);
+   202	    }
+   203	
+   204	    $raw = function_exists('get_field') ? get_field('participantes_grupo', $grupo_id)
+   205	                                        : get_post_meta($grupo_id, 'participantes_grupo', true);
+   206	    $ids = str_groups_normalize_ids($raw);
+   207	    if (!in_array($pareja_id, $ids, true)) $ids[] = $pareja_id;
+   208	
+   209	    if (function_exists('update_field')) update_field('participantes_grupo', $ids, $grupo_id);
+   210	    else update_post_meta($grupo_id, 'participantes_grupo', $ids);
+   211	
+   212	    str_groups_json_ok([
+   213	        'message' => 'Asignado.',
+   214	        'grupo_id'=> $grupo_id,
+   215	        'miembros'=> $ids,
+   216	    ]);
+   217	}
+   218	
+   219	/** Quitar pareja */
+   220	function saas_grupo_quitar() {
+   221	    str_groups_check_nonce();
+   222	    str_groups_require_caps();
+   223	
+   224	    $comp_id   = isset($_POST['competicion_id']) ? (int)$_POST['competicion_id'] : 0;
+   225	    $grupo_id  = isset($_POST['grupo_id'])       ? (int)$_POST['grupo_id']       : 0;
+   226	    $pareja_id = isset($_POST['pareja_id'])      ? (int)$_POST['pareja_id']      : 0;
+   227	
+   228	    if (!$grupo_id || !$pareja_id) {
+   229	        str_groups_json_error(['message' => 'Datos incompletos (grupo/pareja).']);
+   230	    }
+   231	
+   232	    if (!$comp_id && $grupo_id) {
+   233	        $raw = function_exists('get_field')
+   234	            ? get_field('torneo_asociado', $grupo_id)
+   235	            : get_post_meta($grupo_id, 'torneo_asociado', true);
+   236	        $ids = str_groups_normalize_ids($raw);
+   237	        if (count($ids) === 1) $comp_id = (int)$ids[0];
+   238	    }
+   239	    if (!$comp_id) str_groups_json_error(['message' => 'ID de competición no determinado.']);
+   240	
+   241	    if (get_post_type($grupo_id) !== 'grupo' || get_post_status($grupo_id) !== 'publish') {
+   242	        str_groups_json_error(['message' => 'Grupo inválido.']);
+   243	    }
+   244	    if (!str_groups_group_belongs_to_comp($grupo_id, $comp_id)) {
+   245	        str_groups_json_error(['message' => 'El grupo no pertenece a esta competición.']);
+   246	    }
+   247	
+   248	    $raw = function_exists('get_field')
+   249	        ? get_field('participantes_grupo', $grupo_id)
+   250	        : get_post_meta($grupo_id, 'participantes_grupo', true);
+   251	
+   252	    $ids = str_groups_normalize_ids($raw);
+   253	    $ids = array_values(array_diff($ids, [(int)$pareja_id]));
+   254	
+   255	    if (function_exists('update_field')) update_field('participantes_grupo', $ids, $grupo_id);
+   256	    else update_post_meta($grupo_id, 'participantes_grupo', $ids);
+   257	
+   258	    str_groups_json_ok([
+   259	        'message'  => 'Quitado.',
+   260	        'grupo_id' => $grupo_id,
+   261	        'miembros' => $ids,
+   262	    ]);
+   263	}
+   264	
+   265	/**
+   266	 * ===== Bootstrap RENOMBRAR GRUPO (Fase 1) =====
+   267	 */
+   268	(function () {
+   269	    $candidatos = [
+   270	        __DIR__ . '/grupo-renombrar.php',
+   271	        dirname(__DIR__) . '/grupo-renombrar.php',
+   272	        dirname(__DIR__, 2) . '/groups/grupo-renombrar.php',
+   273	    ];
+   274	    $cargado = false;
+   275	    foreach ($candidatos as $path) {
+   276	        if (file_exists($path)) {
+   277	            require_once $path;
+   278	            str_escribir_log('BOOT-AJAX-RENAME loaded: ' . $path, 'GROUPS:RENAME');
+   279	            $cargado = true;
+   280	            break;
+   281	        }
+   282	    }
+   283	    if (!$cargado) {
+   284	        str_escribir_log('BOOT-AJAX-MISSING grupo-renombrar.php | tried: ' . implode(' | ', $candidatos), 'GROUPS:RENAME');
+   285	    }
+   286	
+   287	    if (function_exists('saas_grupo_renombrar')) {
+   288	        add_action('wp_ajax_saas_grupo_renombrar', 'saas_grupo_renombrar');
+   289	        add_action('wp_ajax_str_grupo_renombrar',  'saas_grupo_renombrar');
+   290	    } else {
+   291	        add_action('wp_ajax_saas_grupo_renombrar', function(){ str_groups_json_error(['message'=>'Handler renombrar no cargado.'], 500); });
+   292	        add_action('wp_ajax_str_grupo_renombrar',  function(){ str_groups_json_error(['message'=>'Handler renombrar no cargado.'], 500); });
+   293	    }
+   294	})();
+   295	
+   296	// === Bootstrap DISTRIBUCIÓN (preview + aplicar) ===============================
+   297	$__str_grupos_dist_file = __DIR__ . '/grupos-distribucion.php';
+   298	if (file_exists($__str_grupos_dist_file)) {
+   299	    require_once $__str_grupos_dist_file;
+   300	} else {
+   301	    if (!function_exists('str_escribir_log')) {
+   302	        function str_escribir_log($m,$o='GROUPS:DIST'){ @file_put_contents(__DIR__.'/../../../../debug-saas-torneos.log', "[".date('Y-m-d H:i:s')."] [$o] $m\n", FILE_APPEND); }
+   303	    }
+   304	    str_escribir_log('BOOT-AJAX-MISSING grupos-distribucion.php');
+   305	}
+   306	
+   307	// === Bootstrap ELIMINAR GRUPO ===============================================
+   308	$__str_grupo_eliminar_file = __DIR__ . '/grupo-eliminar.php';
+   309	if (file_exists($__str_grupo_eliminar_file)) {
+   310	    if (!function_exists('saas_grupo_eliminar')) {
+   311	        require_once $__str_grupo_eliminar_file;
+   312	        if (function_exists('str_escribir_log')) {
+   313	            str_escribir_log('BOOT-AJAX-DELETE loaded: ' . $__str_grupo_eliminar_file, 'GROUPS:DELETE');
+   314	        }
+   315	    }
+   316	} else {
+   317	    if (!function_exists('str_escribir_log')) {
+   318	        function str_escribir_log($m, $o='GRUPOS'){ @file_put_contents(__DIR__.'/../../../../debug-saas-torneos.log', "[".date('Y-m-d H:i:s')."] [$o] $m\n", FILE_APPEND); }
+   319	    }
+   320	    str_escribir_log('BOOT-AJAX-MISSING grupo-eliminar.php', 'GROUPS:DELETE');
+   321	}
+   322	add_action('wp_ajax_saas_grupo_eliminar', 'saas_grupo_eliminar');
+   323	add_action('wp_ajax_str_grupo_eliminar',  'saas_grupo_eliminar');
+   324	
+   325	
+   326	/* ────────────────────────────────────────────────────────────────
+   327	   MOUNT POINT FRONTEND PARA GRUPOS
+   328	   - Coloca <div id="str-gestion-grupos"></div> en el frontend de
+   329	     single "competicion" SI NO EXISTE ya en el HTML de la plantilla.
+   330	   - Con prioridad 5 (antes de la mayoría de scripts de footer).
+   331	   ──────────────────────────────────────────────────────────────── */
+   332	add_action('wp_footer', function () {
+   333	    if (is_admin()) return;
+   334	    if (!is_singular('competicion')) return;
+   335	
+   336	    // No podemos "comprobar" el DOM desde PHP, así que lo imprimimos siempre.
+   337	    echo '<div id="str-gestion-grupos"></div>';
+   338	    if (function_exists('str_escribir_log')) {
+   339	        str_escribir_log('Mount point impreso en wp_footer para single competicion.', 'GROUPS:MOUNT');
+   340	    }
+   341	}, 5);
+   342	
+   343	/* (Opcional) Fallback: añadir también al final del contenido si el tema sí usa the_content */
+   344	add_filter('the_content', function ($content) {
+   345	    if (!is_singular('competicion')) return $content;
+   346	    // Si ya hay un contenedor similar en el contenido, no duplicamos
+   347	    if (strpos($content, 'id="str-gestion-grupos"') !== false) return $content;
+   348	    return $content . "\n\n" . '<div id="str-gestion-grupos"></div>';
+   349	}, 99);

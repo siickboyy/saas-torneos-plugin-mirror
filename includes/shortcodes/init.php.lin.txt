@@ -1,0 +1,24 @@
+     1	<?php
+     2	/**
+     3	 * Registro centralizado de todos los shortcodes largos del plugin
+     4	 */
+     5	
+     6	require_once __DIR__ . '/panel-cliente.php';
+     7	require_once __DIR__ . '/mis-competiciones.php';
+     8	require_once __DIR__ . '/jugadores.php';
+     9	require_once __DIR__ . '/ajustes.php';
+    10	require_once __DIR__ . '/crear-competicion.php';
+    11	require_once __DIR__ . '/registro-jugador.php';
+    12	
+    13	
+    14	add_action('wp_enqueue_scripts', 'str_enqueue_css_nueva_competicion');
+    15	function str_enqueue_css_nueva_competicion() {
+    16	    if (is_page('crear-competicion')) {
+    17	        wp_enqueue_style(
+    18	            'str-nueva-competicion-css',
+    19	            STR_PLUGIN_URL . 'assets/css/nueva-competicion.css',
+    20	            [],
+    21	            '1.1'
+    22	        );
+    23	    }
+    24	}

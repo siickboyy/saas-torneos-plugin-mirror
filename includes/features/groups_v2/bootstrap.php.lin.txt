@@ -1,0 +1,70 @@
+     1	<?php
+     2	if ( ! defined('ABSPATH') ) { exit; }
+     3	
+     4	/**
+     5	 * Bootstrap Groups v2 (REST + flag + enqueue)
+     6	 * Se invoca desde el mu-plugin loader.
+     7	 */
+     8	function str_groups_v2_bootstrap( $plugin_dir ) {
+     9	    // Guardamos ruta en constante local si no existe
+    10	    if ( ! defined('STR_GROUPS_V2_DIR') ) {
+    11	        define('STR_GROUPS_V2_DIR', trailingslashit($plugin_dir) . 'includes/features/groups_v2/');
+    12	    }
+    13	    if ( ! defined('STR_GROUPS_V2_URL') ) {
+    14	        $base_url = trailingslashit( plugin_dir_url( $plugin_dir . '/saas-torneos-de-raqueta.php' ) ); // fallback genérico
+    15	        // Mejor: derivar desde el path real del plugin
+    16	        $base_url = trailingslashit( plugin_dir_url( $plugin_dir . '/' ) . 'saas-torneos-de-raqueta' );
+    17	        define('STR_GROUPS_V2_URL', $base_url . 'includes/features/groups_v2/');
+    18	    }
+    19	
+    20	    require_once STR_GROUPS_V2_DIR . 'rest.php';
+    21	
+    22	    add_action('rest_api_init', function() {
+    23	        (new STR_Groups_V2_REST())->register_routes();
+    24	    });
+    25	
+    26	    // Flag v2
+    27	    if ( ! function_exists('str_groups_v2_is_enabled') ) {
+    28	        function str_groups_v2_is_enabled() {
+    29	            // GET tiene preferencia para pruebas: ?groups_engine=v2
+    30	            if ( isset($_GET['groups_engine']) && $_GET['groups_engine'] === 'v2' ) return true;
+    31	            $opt = get_option('str_groups_engine');
+    32	            if ( is_string($opt) && strtolower($opt) === 'v2' ) return true;
+    33	            return false;
+    34	        }
+    35	    }
+    36	
+    37	    // Enqueue del JS v2 SOLO si flag activo y estamos en una competición (CPT)
+    38	    add_action('wp_enqueue_scripts', function() use ($plugin_dir) {
+    39	        if ( ! str_groups_v2_is_enabled() ) return;
+    40	        if ( ! is_singular('competicion') ) return;
+    41	
+    42	        global $post;
+    43	        if ( empty($post) ) return;
+    44	
+    45	        // Puedes afinar por deporte/tipo con ACF si quieres (comentado):
+    46	        // $deporte = function_exists('get_field') ? get_field('deporte', $post->ID) : '';
+    47	        // $tipo    = function_exists('get_field') ? get_field('tipo_competicion', $post->ID) : '';
+    48	        // if ( strtolower($deporte) !== 'padel' || strtolower($tipo) !== 'torneo' ) return;
+    49	
+    50	        // Encolar JS v2
+    51	        $assets_js_rel  = 'assets/js/torneo-grupos-v2.js';
+    52	        $assets_js_abs  = trailingslashit($plugin_dir) . $assets_js_rel;
+    53	        $assets_js_url  = trailingslashit( plugin_dir_url($plugin_dir) ) . 'saas-torneos-de-raqueta/' . $assets_js_rel;
+    54	
+    55	        $ver = file_exists($assets_js_abs) ? @filemtime($assets_js_abs) : '1.0.0';
+    56	        wp_enqueue_script( 'str-groups-v2-js', $assets_js_url, ['jquery'], $ver, true );
+    57	
+    58	        // Datos para el JS
+    59	        wp_localize_script( 'str-groups-v2-js', 'strTorneoV2', [
+    60	            'restBase'       => esc_url_raw( rest_url('saas/v1') ),
+    61	            'restNonce'      => wp_create_nonce('wp_rest'),
+    62	            'competicionId'  => (int) $post->ID,
+    63	            'reqId'          => function_exists('str_req_id') ? str_req_id() : substr(uniqid('r', true), 0, 12),
+    64	        ]);
+    65	
+    66	        if ( function_exists('str_log') ) {
+    67	            str_log('GROUPS_V2/ENQUEUE', 'JS encolado', ['post_id'=>$post->ID, 'ver'=>$ver]);
+    68	        }
+    69	    }, 25);
+    70	}

@@ -1,0 +1,384 @@
+     1	<?php
+     2	/**
+     3	 * AJAX Distribución de parejas en grupos (preview + aplicar)
+     4	 * Ruta: includes/features/groups/ajax/grupos-distribucion.php
+     5	 *
+     6	 * Acciones:
+     7	 *  - saas_grupos_distribucion_preview   (alias: str_grupos_distribucion_preview)
+     8	 *  - saas_grupos_distribucion_aplicar   (alias: str_grupos_distribucion_aplicar)
+     9	 *
+    10	 * Requisitos:
+    11	 *  - CPT: grupo, pareja
+    12	 *  - ACF en grupo: torneo_asociado (relationship id/array), participantes_grupo (array ids), nombre_grupo (opcional)
+    13	 *  - ACF en pareja: torneo_asociado (relationship con return object)  ← confirmado por el usuario
+    14	 *
+    15	 * Seguridad:
+    16	 *  - check_ajax_referer('str_nonce', '_ajax_nonce')
+    17	 *  - current_user_can('administrator') || current_user_can('cliente')
+    18	 */
+    19	
+    20	if (!defined('ABSPATH')) { exit; }
+    21	
+    22	/* ------------------------ Utilidades compartidas ------------------------ */
+    23	
+    24	if (!function_exists('str_escribir_log')) {
+    25	    function str_escribir_log($mensaje, $origen = 'GROUPS:DIST'){
+    26	        $ruta = defined('STR_PLUGIN_PATH') ? STR_PLUGIN_PATH . 'debug-saas-torneos.log' : __DIR__ . '/../../../../debug-saas-torneos.log';
+    27	        if (!is_string($mensaje)) { $mensaje = print_r($mensaje, true); }
+    28	        @file_put_contents($ruta, sprintf("[%s] [%s] %s\n", date('Y-m-d H:i:s'), $origen, $mensaje), FILE_APPEND | LOCK_EX);
+    29	    }
+    30	}
+    31	
+    32	/** Normaliza un field ACF (object/ids/array serializado) a array de IDs int */
+    33	function str_dist_normalize_ids($raw) {
+    34	    if (empty($raw)) return [];
+    35	    $out = [];
+    36	    if (is_array($raw)) {
+    37	        foreach ($raw as $item) {
+    38	            if (is_numeric($item)) {
+    39	                $out[] = (int)$item;
+    40	            } elseif (is_object($item) && isset($item->ID)) {
+    41	                $out[] = (int)$item->ID;
+    42	            } elseif (is_array($item) && isset($item['ID'])) {
+    43	                $out[] = (int)$item['ID'];
+    44	            }
+    45	        }
+    46	    } elseif (is_numeric($raw)) {
+    47	        $out[] = (int)$raw;
+    48	    } elseif (is_object($raw) && isset($raw->ID)) {
+    49	        $out[] = (int)$raw->ID;
+    50	    }
+    51	    return array_values(array_unique(array_filter($out)));
+    52	}
+    53	
+    54	/** Valida nonce+permisos y devuelve array con comp_id y req_id */
+    55	function str_dist_guard_common() {
+    56	    if (!isset($_POST['_ajax_nonce'])) {
+    57	        wp_send_json_error(['message' => 'Nonce ausente.'], 401);
+    58	    }
+    59	    check_ajax_referer('str_nonce', '_ajax_nonce');
+    60	
+    61	    if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    62	        wp_send_json_error(['message' => 'Permisos insuficientes.'], 403);
+    63	    }
+    64	
+    65	    $comp_id = isset($_POST['competicion_id']) ? absint($_POST['competicion_id']) : 0;
+    66	    if (!$comp_id || get_post_type($comp_id) !== 'competicion') {
+    67	        wp_send_json_error(['message' => 'Competición inválida.'], 400);
+    68	    }
+    69	
+    70	    $req_id = isset($_POST['req_id']) ? sanitize_text_field($_POST['req_id']) : wp_generate_uuid4();
+    71	    return [$comp_id, $req_id];
+    72	}
+    73	
+    74	/** Carga contexto: grupos del torneo (con miembros) + parejas del torneo */
+    75	function str_dist_fetch_context($comp_id) {
+    76	    // Grupos del torneo (por ACF relationship LIKE para compat)
+    77	    $grupos = get_posts([
+    78	        'post_type'      => 'grupo',
+    79	        'post_status'    => 'publish',
+    80	        'posts_per_page' => -1,
+    81	        'meta_query'     => [[
+    82	            'key'     => 'torneo_asociado',
+    83	            'value'   => '"' . (int)$comp_id . '"',
+    84	            'compare' => 'LIKE',
+    85	        ]],
+    86	        'orderby' => ['date' => 'ASC', 'ID' => 'ASC'],
+    87	    ]);
+    88	
+    89	    $ctx_grupos = [];
+    90	    foreach ($grupos as $g) {
+    91	        $miembros_raw = function_exists('get_field')
+    92	            ? get_field('participantes_grupo', $g->ID, false)
+    93	            : get_post_meta($g->ID, 'participantes_grupo', true);
+    94	        $miembros = str_dist_normalize_ids($miembros_raw);
+    95	
+    96	        $nombre = function_exists('get_field') ? get_field('nombre_grupo', $g->ID) : '';
+    97	        if (!$nombre) $nombre = $g->post_title ?: ('Grupo '.$g->ID);
+    98	
+    99	        $ctx_grupos[] = [
+   100	            'id'       => (int)$g->ID,
+   101	            'nombre'   => (string)$nombre,
+   102	            'miembros' => $miembros, // ids de pareja o jugador
+   103	        ];
+   104	    }
+   105	
+   106	    // Parejas del torneo (ACF pareja.torneo_asociado = OBJECT → normalizamos)
+   107	    $parejas_like = get_posts([
+   108	        'post_type'      => 'pareja',
+   109	        'post_status'    => 'publish',
+   110	        'posts_per_page' => -1,
+   111	        'meta_query'     => [[
+   112	            'key'     => 'torneo_asociado',
+   113	            'value'   => '"' . (int)$comp_id . '"',
+   114	            'compare' => 'LIKE',
+   115	        ]],
+   116	        'fields'  => 'ids',
+   117	    ]);
+   118	
+   119	    // Filtro de seguridad: de esas parejas, confirmar pertenencia leyendo el field (objeto)
+   120	    $parejas_comp = [];
+   121	    foreach ($parejas_like as $pid) {
+   122	        $raw = function_exists('get_field') ? get_field('torneo_asociado', $pid, false) : get_post_meta($pid, 'torneo_asociado', true);
+   123	        $ids = str_dist_normalize_ids($raw); // si return_format=object, caerá aquí (obj→id)
+   124	        if (in_array((int)$comp_id, $ids, true)) {
+   125	            $parejas_comp[] = (int)$pid;
+   126	        }
+   127	    }
+   128	    $parejas_comp = array_values(array_unique($parejas_comp));
+   129	
+   130	    // Mapa miembros actuales por pareja_id → grupo_id (para recolocar controlado)
+   131	    $pair_to_group = [];
+   132	    foreach ($ctx_grupos as $g) {
+   133	        foreach ($g['miembros'] as $pid) {
+   134	            $pair_to_group[$pid] = (int)$g['id'];
+   135	        }
+   136	    }
+   137	
+   138	    return [
+   139	        'grupos'         => $ctx_grupos,
+   140	        'parejas'        => $parejas_comp,
+   141	        'pair_to_group'  => $pair_to_group,
+   142	    ];
+   143	}
+   144	
+   145	/** Algoritmo de reparto random estable con semilla */
+   146	function str_dist_shuffle_with_seed(array $arr, $seed = '') {
+   147	    if ($seed === '' || $seed === null) {
+   148	        shuffle($arr);
+   149	        return $arr;
+   150	    }
+   151	    // PRNG determinista simple (no criptográfico)
+   152	    $seed_str = (string)$seed;
+   153	    $hash = md5($seed_str, true);
+   154	    $state = unpack('N', substr($hash, 0, 4))[1];
+   155	
+   156	    $result = $arr;
+   157	    for ($i = count($result) - 1; $i > 0; $i--) {
+   158	        // LCG
+   159	        $state = (1103515245 * $state + 12345) & 0x7fffffff;
+   160	        $j = $state % ($i + 1);
+   161	        $tmp = $result[$i];
+   162	        $result[$i] = $result[$j];
+   163	        $result[$j] = $tmp;
+   164	    }
+   165	    return $result;
+   166	}
+   167	
+   168	/** Construye plan de distribución (no escribe BD) */
+   169	function str_dist_build_plan(array $ctx, array $params) {
+   170	    $policy       = isset($params['policy']) ? $params['policy'] : 'random';      // random | by_size
+   171	    $seed         = isset($params['seed']) ? (string)$params['seed'] : '';
+   172	    $target_size  = isset($params['target_size']) ? max(2, min(64, (int)$params['target_size'])) : 4;
+   173	    $recolocar    = !empty($params['recolocar']) ? true : false;
+   174	
+   175	    $grupos  = $ctx['grupos'];
+   176	    $parejas = $ctx['parejas'];
+   177	    $p2g     = $ctx['pair_to_group'];
+   178	
+   179	    $summary = [
+   180	        'groups'         => count($grupos),
+   181	        'pairs_total'    => count($parejas),
+   182	        'policy'         => $policy,
+   183	        'target_size'    => $target_size,
+   184	        'recolocar'      => $recolocar,
+   185	        'notes'          => [],
+   186	    ];
+   187	
+   188	    if (empty($grupos)) {
+   189	        return ['plan' => [], 'summary' => $summary, 'error' => 'No hay grupos en esta competición. Crea grupos antes de distribuir.'];
+   190	    }
+   191	    if (empty($parejas)) {
+   192	        $summary['notes'][] = 'No hay parejas asociadas a esta competición.';
+   193	        // Plan vacío (no cambios)
+   194	        $plan = [];
+   195	        foreach ($grupos as $g) {
+   196	            $plan[] = [
+   197	                'grupo_id' => $g['id'],
+   198	                'before'   => $g['miembros'],
+   199	                'after'    => $g['miembros'],
+   200	            ];
+   201	        }
+   202	        return ['plan' => $plan, 'summary' => $summary];
+   203	    }
+   204	
+   205	    // Punto de partida: o bien solo libres, o todas (si recolocar)
+   206	    $asignadas = array_keys($p2g);
+   207	    $libres    = array_values(array_diff($parejas, $asignadas));
+   208	    $pool      = $recolocar ? $parejas : $libres;
+   209	
+   210	    // Orden del pool
+   211	    if ($policy === 'random') {
+   212	        $pool = str_dist_shuffle_with_seed($pool, $seed);
+   213	    } elseif ($policy === 'by_size') {
+   214	        // Podemos mantener el orden actual pero la visita de grupos intentará aproximar a target_size
+   215	        // (si quieres, aquí podrías ordenar por algún “seed” fijo también)
+   216	    }
+   217	
+   218	    // Clonar estado actual si recolocar o no
+   219	    $after = [];
+   220	    foreach ($grupos as $g) {
+   221	        $after[$g['id']] = $recolocar ? [] : $g['miembros'];
+   222	    }
+   223	
+   224	    if ($policy === 'random') {
+   225	        // Round-robin simple, repartiendo el pool sobre el array de grupos
+   226	        $gids = array_map(fn($g)=>$g['id'], $grupos);
+   227	        $gi = 0;
+   228	        foreach ($pool as $pid) {
+   229	            $target_gid = $gids[$gi % count($gids)];
+   230	            $after[$target_gid][] = $pid;
+   231	            $gi++;
+   232	        }
+   233	
+   234	    } elseif ($policy === 'by_size') {
+   235	        // Intentar aproximar tamaños a target_size
+   236	        // 1) Si no recolocamos, calculamos capacidad “faltante” por grupo
+   237	        $needs = [];
+   238	        foreach ($grupos as $g) {
+   239	            $curr = $recolocar ? 0 : count($g['miembros']);
+   240	            $needs[$g['id']] = max(0, $target_size - $curr);
+   241	        }
+   242	
+   243	        // 2) Asignar siguiendo “needs” (más hueco primero)
+   244	        foreach ($pool as $pid) {
+   245	            // escoger grupo con más necesidad actual
+   246	            arsort($needs); // mayor necesidad primero
+   247	            $chosen_gid = key($needs);
+   248	            $after[$chosen_gid][] = $pid;
+   249	            // actualizar necesidad
+   250	            $needs[$chosen_gid] = max(0, $needs[$chosen_gid] - 1);
+   251	        }
+   252	    }
+   253	
+   254	    // Construir plan before/after
+   255	    $plan = [];
+   256	    foreach ($grupos as $g) {
+   257	        $gid = $g['id'];
+   258	        $plan[] = [
+   259	            'grupo_id' => $gid,
+   260	            'before'   => $g['miembros'],
+   261	            'after'    => array_values(array_unique($after[$gid] ?? [])),
+   262	        ];
+   263	    }
+   264	
+   265	    return ['plan' => $plan, 'summary' => $summary];
+   266	}
+   267	
+   268	/** Aplica plan a BD con rollback en caso de fallo */
+   269	function str_dist_apply_plan(array $plan) {
+   270	    $backup = [];
+   271	    foreach ($plan as $item) {
+   272	        $gid = (int)$item['grupo_id'];
+   273	        // lee estado actual por si hay que restaurar
+   274	        $raw = function_exists('get_field')
+   275	            ? get_field('participantes_grupo', $gid, false)
+   276	            : get_post_meta($gid, 'participantes_grupo', true);
+   277	        $backup[$gid] = str_dist_normalize_ids($raw);
+   278	    }
+   279	
+   280	    try {
+   281	        foreach ($plan as $item) {
+   282	            $gid   = (int)$item['grupo_id'];
+   283	            $after = array_map('intval', (array)$item['after']);
+   284	            if (function_exists('update_field')) {
+   285	                if (false === update_field('participantes_grupo', $after, $gid)) {
+   286	                    throw new Exception('Fallo update_field participantes_grupo en grupo '.$gid);
+   287	                }
+   288	            } else {
+   289	                if (false === update_post_meta($gid, 'participantes_grupo', $after)) {
+   290	                    throw new Exception('Fallo update_post_meta participantes_grupo en grupo '.$gid);
+   291	                }
+   292	            }
+   293	        }
+   294	        return true;
+   295	    } catch (\Throwable $e) {
+   296	        // rollback
+   297	        foreach ($backup as $gid => $before) {
+   298	            if (function_exists('update_field')) {
+   299	                @update_field('participantes_grupo', $before, $gid);
+   300	            } else {
+   301	                @update_post_meta($gid, 'participantes_grupo', $before);
+   302	            }
+   303	        }
+   304	        str_escribir_log('[APPLY][ERROR] '.$e->getMessage());
+   305	        return false;
+   306	    }
+   307	}
+   308	
+   309	/* --------------------------- Handlers AJAX --------------------------- */
+   310	
+   311	/** PREVIEW */
+   312	function saas_grupos_distribucion_preview() {
+   313	    list($comp_id, $req_id) = str_dist_guard_common();
+   314	
+   315	    $policy      = isset($_POST['policy']) ? sanitize_text_field($_POST['policy']) : 'random';
+   316	    $recolocar   = !empty($_POST['recolocar']) ? true : false;
+   317	    $target_size = isset($_POST['target_size']) ? (int)$_POST['target_size'] : 4;
+   318	    $seed        = isset($_POST['seed']) ? sanitize_text_field($_POST['seed']) : '';
+   319	
+   320	    $ctx   = str_dist_fetch_context($comp_id);
+   321	    $built = str_dist_build_plan($ctx, [
+   322	        'policy'      => $policy,
+   323	        'recolocar'   => $recolocar,
+   324	        'target_size' => $target_size,
+   325	        'seed'        => $seed,
+   326	    ]);
+   327	
+   328	    if (!empty($built['error'])) {
+   329	        wp_send_json_error([
+   330	            'message' => $built['error'],
+   331	            'summary' => $built['summary'],
+   332	            'req_id'  => $req_id,
+   333	        ], 400);
+   334	    }
+   335	
+   336	    str_escribir_log('[PREVIEW] OK comp='.$comp_id.' policy='.$policy.' recolocar='.(int)$recolocar.' target='.$target_size.' seed='.$seed.' plan_items='.count($built['plan']).' | req_id='.$req_id);
+   337	
+   338	    wp_send_json_success([
+   339	        'plan'    => $built['plan'],
+   340	        'summary' => $built['summary'],
+   341	        'req_id'  => $req_id,
+   342	    ]);
+   343	}
+   344	
+   345	/** APLICAR */
+   346	function saas_grupos_distribucion_aplicar() {
+   347	    list($comp_id, $req_id) = str_dist_guard_common();
+   348	
+   349	    $policy      = isset($_POST['policy']) ? sanitize_text_field($_POST['policy']) : 'random';
+   350	    $recolocar   = !empty($_POST['recolocar']) ? true : false;
+   351	    $target_size = isset($_POST['target_size']) ? (int)$_POST['target_size'] : 4;
+   352	    $seed        = isset($_POST['seed']) ? sanitize_text_field($_POST['seed']) : '';
+   353	
+   354	    $ctx   = str_dist_fetch_context($comp_id);
+   355	    $built = str_dist_build_plan($ctx, [
+   356	        'policy'      => $policy,
+   357	        'recolocar'   => $recolocar,
+   358	        'target_size' => $target_size,
+   359	        'seed'        => $seed,
+   360	    ]);
+   361	
+   362	    if (!empty($built['error'])) {
+   363	        wp_send_json_error([
+   364	            'message' => $built['error'],
+   365	            'summary' => $built['summary'],
+   366	            'req_id'  => $req_id,
+   367	        ], 400);
+   368	    }
+   369	
+   370	    $ok = str_dist_apply_plan($built['plan']);
+   371	    if (!$ok) {
+   372	        wp_send_json_error([
+   373	            'message' => 'No se pudo aplicar la distribución (se revirtió el estado).',
+   374	            'req_id'  => $req_id,
+   375	        ], 500);
+   376	    }
+   377	
+   378	    str_escribir_log('[APLICAR] OK comp='.$comp_id.' policy='.$policy.' recolocar='.(int)$recolocar.' target='.$target_size.' seed='.$seed.' plan_items='.count($built['plan']).' | req_id='.$req_id);
+   379	
+   380	    wp_send_json_success([
+   381	        'message' => 'Distribución aplicada correctamente.',
+   382	        'req_id'  => $req_id,
+   383	    ]);
+   384	}

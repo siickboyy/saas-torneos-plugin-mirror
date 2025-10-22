@@ -1,0 +1,40 @@
+     1	<?php
+     2	// CPT: Competición (torneos, rankings, ligas, etc.)
+     3	
+     4	function str_register_cpt_competicion() {
+     5	    $labels = [
+     6	        'name'               => __('Competiciones', 'saas-torneos'),
+     7	        'singular_name'      => __('Competición', 'saas-torneos'),
+     8	        'add_new'            => __('Añadir nueva', 'saas-torneos'),
+     9	        'add_new_item'       => __('Añadir nueva competición', 'saas-torneos'),
+    10	        'edit_item'          => __('Editar competición', 'saas-torneos'),
+    11	        'new_item'           => __('Nueva competición', 'saas-torneos'),
+    12	        'all_items'          => __('Todas las competiciones', 'saas-torneos'),
+    13	        'view_item'          => __('Ver competición', 'saas-torneos'),
+    14	        'search_items'       => __('Buscar competiciones', 'saas-torneos'),
+    15	        'not_found'          => __('No se encontraron competiciones', 'saas-torneos'),
+    16	        'not_found_in_trash' => __('No hay competiciones en la papelera', 'saas-torneos'),
+    17	        'menu_name'          => __('Competiciones', 'saas-torneos')
+    18	    ];
+    19	
+    20	    $args = [
+    21	        'labels'             => $labels,
+    22	        'public'             => true, // ✅ importante para que genere URLs
+    23	        'show_ui'            => true,
+    24	        'show_in_menu'       => true,
+    25	        'capability_type'    => 'post',
+    26	        'hierarchical'       => false,
+    27	        'supports'           => ['title'],
+    28	        'menu_position'      => 20,
+    29	        'menu_icon'          => 'dashicons-awards',
+    30	        'has_archive'        => true, // ✅ permite archivo /competicion/
+    31	        'rewrite'            => [
+    32	            'slug' => 'competicion',
+    33	            'with_front' => false
+    34	        ],
+    35	        'show_in_rest'       => false
+    36	    ];
+    37	
+    38	    register_post_type('competicion', $args);
+    39	}
+    40	add_action('init', 'str_register_cpt_competicion');

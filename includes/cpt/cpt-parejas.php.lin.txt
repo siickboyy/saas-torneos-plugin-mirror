@@ -1,0 +1,37 @@
+     1	<?php
+     2	// CPT: Parejas de jugadores para deportes dobles
+     3	
+     4	function str_register_cpt_parejas() {
+     5	    $labels = [
+     6	        'name'               => __('Parejas', 'saas-torneos'),
+     7	        'singular_name'      => __('Pareja', 'saas-torneos'),
+     8	        'add_new'            => __('Añadir nueva', 'saas-torneos'),
+     9	        'add_new_item'       => __('Añadir nueva pareja', 'saas-torneos'),
+    10	        'edit_item'          => __('Editar pareja', 'saas-torneos'),
+    11	        'new_item'           => __('Nueva pareja', 'saas-torneos'),
+    12	        'all_items'          => __('Todas las parejas', 'saas-torneos'),
+    13	        'view_item'          => __('Ver pareja', 'saas-torneos'),
+    14	        'search_items'       => __('Buscar parejas', 'saas-torneos'),
+    15	        'not_found'          => __('No se encontraron parejas', 'saas-torneos'),
+    16	        'not_found_in_trash' => __('No hay parejas en la papelera', 'saas-torneos'),
+    17	        'menu_name'          => __('Parejas', 'saas-torneos')
+    18	    ];
+    19	
+    20	    $args = [
+    21	        'labels'             => $labels,
+    22	        'public'             => false,
+    23	        'show_ui'            => true,
+    24	        'show_in_menu'       => true,
+    25	        'capability_type'    => 'post',
+    26	        'hierarchical'       => false,
+    27	        'supports'           => ['title'],
+    28	        'menu_position'      => 22,
+    29	        'menu_icon'          => 'dashicons-heart', // Icono de corazón para parejas ♥
+    30	        'has_archive'        => false,
+    31	        'rewrite'            => false,
+    32	        'show_in_rest'       => false
+    33	    ];
+    34	
+    35	    register_post_type( 'pareja', $args );
+    36	}
+    37	add_action( 'init', 'str_register_cpt_parejas' );

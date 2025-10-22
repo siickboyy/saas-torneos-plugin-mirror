@@ -1,0 +1,37 @@
+     1	<?php
+     2	// AJAX: Cargar competiciones jugadas por el jugador
+     3	// Antiguo: ajax-cargar-competiciones-jugador.php
+     4	// Este endpoint servirá para devolver las competiciones jugadas (filtradas por deporte y año).
+     5	// Por ahora es un esqueleto base, listo para conectar cuando esté implementada la lógica real.
+     6	
+     7	add_action('wp_ajax_str_cargar_competiciones_jugador', 'str_cargar_competiciones_jugador');
+     8	add_action('wp_ajax_nopriv_str_cargar_competiciones_jugador', 'str_cargar_competiciones_jugador');
+     9	
+    10	function str_cargar_competiciones_jugador() {
+    11	    // Validar parámetros recibidos
+    12	    $jugador_id = isset($_POST['jugador_id']) ? intval($_POST['jugador_id']) : 0;
+    13	    $deporte    = isset($_POST['deporte']) ? sanitize_text_field($_POST['deporte']) : '';
+    14	    $ano        = isset($_POST['ano']) ? sanitize_text_field($_POST['ano']) : '';
+    15	
+    16	    // TODO: Aquí irá la consulta real a la BD para extraer las competiciones jugadas
+    17	    // según el $jugador_id, $deporte y $ano.
+    18	
+    19	    // Por ahora, devolvemos datos simulados:
+    20	    $response = [
+    21	        [
+    22	            'competicion' => 'Torneo Madrid',
+    23	            'posicion'    => '3º grupo',
+    24	            'fecha'       => '27/09/25',
+    25	        ],
+    26	        [
+    27	            'competicion' => 'Torneo Barcelona',
+    28	            'posicion'    => 'Ganador',
+    29	            'fecha'       => '13/10/25',
+    30	        ],
+    31	    ];
+    32	
+    33	    wp_send_json_success($response);
+    34	    exit;
+    35	}
+    36	
+    37	// NOTA: Cuando la lógica real esté lista, aquí irá la consulta a los posts de tipo competición/torneo.

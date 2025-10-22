@@ -1,0 +1,629 @@
+     1	<?php
+     2	if ( ! defined('ABSPATH') ) { exit; }
+     3	
+     4	class STR_Groups_V2_REST {
+     5	
+     6	    public function register_routes() {
+     7	        register_rest_route('saas/v1', '/groups', [
+     8	            [
+     9	                'methods'             => WP_REST_Server::READABLE, // GET
+    10	                'callback'            => [$this, 'get_groups'],
+    11	                'permission_callback' => '__return_true',          // lectura pública
+    12	                'args'                => [
+    13	                    'competicion_id' => ['type'=>'integer','required'=>true],
+    14	                ],
+    15	            ],
+    16	        ]);
+    17	
+    18	        register_rest_route('saas/v1', '/groups/standings', [
+    19	            [
+    20	                'methods'             => WP_REST_Server::READABLE, // GET
+    21	                'callback'            => [$this, 'get_standings'],
+    22	                'permission_callback' => '__return_true',
+    23	                'args'                => [
+    24	                    'competicion_id'     => ['type'=>'integer','required'=>true],
+    25	                    'incluir_propuestos' => ['type'=>'boolean','required'=>false],
+    26	                    'ppv'                => ['type'=>'integer','required'=>false],
+    27	                ],
+    28	            ],
+    29	        ]);
+    30	
+    31	        register_rest_route('saas/v1', '/groups/auto-assign', [
+    32	            [
+    33	                'methods'             => WP_REST_Server::CREATABLE, // POST
+    34	                'callback'            => [$this, 'post_auto_assign'],
+    35	                'permission_callback' => [$this, 'can_manage'],
+    36	                'args'                => [
+    37	                    'competicion_id' => ['type'=>'integer','required'=>true],
+    38	                ],
+    39	            ],
+    40	        ]);
+    41	
+    42	        register_rest_route('saas/v1', '/group/(?P<grupo_id>\d+)/assign', [
+    43	            [
+    44	                'methods'             => WP_REST_Server::CREATABLE, // POST
+    45	                'callback'            => [$this, 'post_assign_pair'],
+    46	                'permission_callback' => [$this, 'can_manage'],
+    47	                'args'                => [
+    48	                    'grupo_id'      => ['type'=>'integer','required'=>true],
+    49	                    'competicion_id'=> ['type'=>'integer','required'=>true],
+    50	                    'pareja_id'     => ['type'=>'integer','required'=>true],
+    51	                    'placeholder_id'=> ['type'=>'integer','required'=>false],
+    52	                ],
+    53	            ],
+    54	        ]);
+    55	
+    56	        register_rest_route('saas/v1', '/bracket/volcar', [
+    57	            [
+    58	                'methods'             => WP_REST_Server::CREATABLE, // POST
+    59	                'callback'            => [$this, 'post_bracket_volcar'],
+    60	                'permission_callback' => [$this, 'can_manage'],
+    61	                'args'                => [
+    62	                    'competicion_id'     => ['type'=>'integer','required'=>true],
+    63	                    'incluir_propuestos' => ['type'=>'boolean','required'=>false],
+    64	                ],
+    65	            ],
+    66	        ]);
+    67	    }
+    68	
+    69	    /* ===========================
+    70	     *  Permissions
+    71	     * =========================== */
+    72	    public function can_manage( WP_REST_Request $req ) {
+    73	        // Requerimos login + rol cliente o admin
+    74	        if ( ! is_user_logged_in() ) return false;
+    75	        if ( current_user_can('administrator') || current_user_can('cliente') ) return true;
+    76	        return false;
+    77	    }
+    78	
+    79	    /* ===========================
+    80	     *  GET /groups
+    81	     * =========================== */
+    82	    public function get_groups( WP_REST_Request $req ) {
+    83	        $cid = (int) $req->get_param('competicion_id');
+    84	        if ( $cid <= 0 ) { return new WP_Error('bad_request', 'competicion_id inválido', ['status'=>400]); }
+    85	
+    86	        $meta = [
+    87	            'n_grupos'   => (int) get_post_meta($cid, 'str_n_grupos', true),
+    88	            'n_parejas'  => (int) get_post_meta($cid, 'str_n_parejas', true),
+    89	            'fase_final' => (string) get_post_meta($cid, 'str_fase_final', true),
+    90	            'modo_final' => (string) get_post_meta($cid, 'str_modo_final', true),
+    91	        ];
+    92	
+    93	        $grupos = $this->listar_grupos_competicion($cid);
+    94	        $todas  = $this->listar_parejas_competicion($cid);
+    95	        $libres = $this->calcular_parejas_libres($todas, $grupos);
+    96	
+    97	        if ( function_exists('str_log') ) {
+    98	            str_log('GROUPS_V2/GET_GROUPS', 'OK', [
+    99	                'comp'=>$cid,'grupos'=>count($grupos),'parejas_total'=>count($todas),'libres'=>count($libres)
+   100	            ]);
+   101	        }
+   102	
+   103	        return new WP_REST_Response([
+   104	            'competicion_id' => $cid,
+   105	            'meta'           => $meta,
+   106	            'grupos'         => $grupos,
+   107	            'parejas_libres' => $libres,
+   108	        ], 200);
+   109	    }
+   110	
+   111	    /* ===========================
+   112	     *  GET /groups/standings
+   113	     * =========================== */
+   114	    public function get_standings( WP_REST_Request $req ) {
+   115	        $cid  = (int) $req->get_param('competicion_id');
+   116	        $prop = (bool) $req->get_param('incluir_propuestos');
+   117	        $ppv  = (int) ($req->get_param('ppv') ?: 3);
+   118	        if ( $cid <= 0 ) { return new WP_Error('bad_request', 'competicion_id inválido', ['status'=>400]); }
+   119	
+   120	        $out_groups = [];
+   121	        $count_matches = 0;
+   122	
+   123	        $grupos_ids = $this->listar_grupos_ids($cid);
+   124	        foreach ($grupos_ids as $gid) {
+   125	            // seguridad de pertenencia
+   126	            $comp_g = (int) get_post_meta($gid, 'competicion_id', true);
+   127	            if ( $comp_g !== $cid ) continue;
+   128	
+   129	            $ginfo = $this->grupo_info($gid);
+   130	
+   131	            // Inicial stats
+   132	            $stats = [];
+   133	            foreach ($ginfo['participantes'] as $p) {
+   134	                $stats[ (int)$p['id'] ] = ['pj'=>0,'pg'=>0,'pp'=>0,'pts'=>0,'sets_f'=>0,'sets_c'=>0,'juegos_f'=>0,'juegos_c'=>0];
+   135	            }
+   136	
+   137	            $partidos = $this->listar_partidos_de_grupo($gid);
+   138	            foreach ($partidos as $pid) {
+   139	                if ( ! $this->contar_partido($pid, $prop) ) continue;
+   140	
+   141	                $p1 = (int) get_post_meta($pid, 'pareja_1', true);
+   142	                $p2 = (int) get_post_meta($pid, 'pareja_2', true);
+   143	                if ( $p1 <= 0 || $p2 <= 0 ) continue;
+   144	
+   145	                // ambos del grupo
+   146	                if ( ! $this->pareja_en_grupo($p1, $ginfo) || ! $this->pareja_en_grupo($p2, $ginfo) ) continue;
+   147	
+   148	                $rows = $this->leer_resultado($pid);
+   149	                if ( $this->aplicar_resultado($stats, $p1, $p2, $rows, $ppv) ) { $count_matches++; }
+   150	            }
+   151	
+   152	            // map + orden
+   153	            $items = [];
+   154	            foreach ($ginfo['participantes'] as $p) {
+   155	                $pid = (int) $p['id'];
+   156	                $st = $stats[$pid] ?? ['pj'=>0,'pg'=>0,'pp'=>0,'pts'=>0,'sets_f'=>0,'sets_c'=>0,'juegos_f'=>0,'juegos_c'=>0];
+   157	                $items[] = [
+   158	                    'pareja_id'   => $pid,
+   159	                    'title'       => $p['title'],
+   160	                    'placeholder' => (bool) $p['placeholder'],
+   161	                    'pj'          => $st['pj'],
+   162	                    'pg'          => $st['pg'],
+   163	                    'pp'          => $st['pp'],
+   164	                    'pts'         => $st['pts'],
+   165	                    'sets_f'      => $st['sets_f'],
+   166	                    'sets_c'      => $st['sets_c'],
+   167	                    'dif_sets'    => $st['sets_f'] - $st['sets_c'],
+   168	                    'juegos_f'    => $st['juegos_f'],
+   169	                    'juegos_c'    => $st['juegos_c'],
+   170	                    'dif_juegos'  => $st['juegos_f'] - $st['juegos_c'],
+   171	                ];
+   172	            }
+   173	            usort($items, [$this,'ordenar_items']);
+   174	
+   175	            $out_groups[] = [
+   176	                'grupo_id' => $ginfo['id'],
+   177	                'letra'    => $ginfo['letra'],
+   178	                'items'    => $items,
+   179	            ];
+   180	        }
+   181	
+   182	        if ( function_exists('str_log') ) {
+   183	            str_log('GROUPS_V2/STANDINGS', 'OK', ['comp'=>$cid,'grupos'=>count($out_groups),'partidos'=>$count_matches,'ppv'=>$ppv,'prop'=>$prop]);
+   184	        }
+   185	
+   186	        return new WP_REST_Response([
+   187	            'competicion_id' => $cid,
+   188	            'grupos'         => $out_groups,
+   189	            'resumen'        => [
+   190	                'grupos_calculados' => count($out_groups),
+   191	                'partidos_contados' => $count_matches,
+   192	                'criterio_puntos'   => "victoria={$ppv}, derrota=0",
+   193	                'incluye_propuestos'=> $prop ? true : false
+   194	            ]
+   195	        ], 200);
+   196	    }
+   197	
+   198	    /* ===========================
+   199	     *  POST /groups/auto-assign
+   200	     * =========================== */
+   201	    public function post_auto_assign( WP_REST_Request $req ) {
+   202	        $cid = (int) $req->get_param('competicion_id');
+   203	        if ( $cid <= 0 ) { return new WP_Error('bad_request', 'competicion_id inválido', ['status'=>400]); }
+   204	
+   205	        $all_pairs = $this->listar_parejas_competicion($cid);
+   206	        $free      = $this->calcular_parejas_libres($all_pairs, $this->listar_grupos_competicion($cid));
+   207	        if ( ! empty($free) ) shuffle($free);
+   208	
+   209	        $reemplazos = 0; $asignadas = 0;
+   210	        $grupos_ids = $this->listar_grupos_ids($cid);
+   211	
+   212	        foreach ($grupos_ids as $gid) {
+   213	            if ( empty($free) ) break;
+   214	
+   215	            $ginfo = $this->grupo_info($gid);
+   216	
+   217	            $placeholders = array_values( array_map(
+   218	                fn($p) => (int)$p['id'],
+   219	                array_filter($ginfo['participantes'], fn($p) => !empty($p['placeholder']))
+   220	            ));
+   221	            if ( empty($placeholders) ) continue;
+   222	
+   223	            foreach ($placeholders as $phid) {
+   224	                if ( empty($free) ) break;
+   225	                $par    = array_pop($free);
+   226	                $pidNew = (int) $par['id'];
+   227	
+   228	                // Garantiza vínculo
+   229	                $meta_comp = (int) get_post_meta($pidNew, 'competicion_id', true);
+   230	                if ( $meta_comp !== $cid ) update_post_meta($pidNew, 'competicion_id', $cid);
+   231	
+   232	                if ( $this->grupo_reemplazar_participante($gid, $phid, $pidNew) ) {
+   233	                    $this->partidos_reemplazar_en_grupo($gid, $phid, $pidNew);
+   234	                    $reemplazos++; $asignadas++;
+   235	                }
+   236	            }
+   237	        }
+   238	
+   239	        if ( function_exists('str_log') ) {
+   240	            str_log('GROUPS_V2/AUTOASSIGN', 'OK', ['comp'=>$cid,'reemplazos'=>$reemplazos,'asignadas'=>$asignadas]);
+   241	        }
+   242	
+   243	        return new WP_REST_Response([
+   244	            'resumen' => [
+   245	                'grupos_procesados'         => count($grupos_ids),
+   246	                'placeholders_reemplazados' => $reemplazos,
+   247	                'parejas_asignadas'         => $asignadas,
+   248	            ]
+   249	        ], 200);
+   250	    }
+   251	
+   252	    /* ===========================
+   253	     *  POST /group/{id}/assign
+   254	     * =========================== */
+   255	    public function post_assign_pair( WP_REST_Request $req ) {
+   256	        $cid  = (int) $req->get_param('competicion_id');
+   257	        $gid  = (int) $req->get_param('grupo_id');
+   258	        $pid  = (int) $req->get_param('pareja_id');
+   259	        $ph   = (int) $req->get_param('placeholder_id');
+   260	
+   261	        if ( $cid<=0 || $gid<=0 || $pid<=0 ) { return new WP_Error('bad_request', 'Parámetros inválidos', ['status'=>400]); }
+   262	
+   263	        $grupo_comp = (int) get_post_meta($gid, 'competicion_id', true);
+   264	        if ( $grupo_comp !== $cid ) { return new WP_Error('bad_request','El grupo no pertenece a la competición',['status'=>400]); }
+   265	
+   266	        // Evitar duplicados: si ya está en otro grupo…
+   267	        $gid_actual = $this->pareja_grupo_actual($cid, $pid);
+   268	        if ( $gid_actual > 0 && $gid_actual !== $gid ) {
+   269	            return new WP_Error('already_assigned', 'Pareja ya asignada a otro grupo', ['status'=>409, 'grupo_id'=>$gid_actual] );
+   270	        }
+   271	
+   272	        $ginfo = $this->grupo_info($gid);
+   273	
+   274	        if ( $ph <= 0 ) {
+   275	            foreach ($ginfo['participantes'] as $p) {
+   276	                if ( ! empty($p['placeholder']) ) { $ph = (int) $p['id']; break; }
+   277	            }
+   278	        }
+   279	        if ( $ph <= 0 ) { return new WP_Error('group_full','No hay placeholders en el grupo',['status'=>409]); }
+   280	
+   281	        $es_ph = (bool) get_post_meta($ph, 'placeholder', true);
+   282	        $esta  = false;
+   283	        foreach ($ginfo['participantes'] as $p) { if ( (int)$p['id'] === $ph ) { $esta = true; break; } }
+   284	        if ( ! $es_ph || ! $esta ) { return new WP_Error('bad_request','placeholder_id no válido',['status'=>400]); }
+   285	
+   286	        // Vincular pareja a comp
+   287	        if ( (int)get_post_meta($pid,'competicion_id',true) !== $cid ) update_post_meta($pid,'competicion_id',$cid);
+   288	
+   289	        if ( ! $this->grupo_reemplazar_participante($gid, $ph, $pid) ) {
+   290	            return new WP_Error('server_error','No se pudo reemplazar',['status'=>500]);
+   291	        }
+   292	        $mod = $this->partidos_reemplazar_en_grupo($gid, $ph, $pid);
+   293	
+   294	        if ( function_exists('str_log') ) {
+   295	            str_log('GROUPS_V2/ASSIGN', 'OK', ['comp'=>$cid,'gid'=>$gid,'pid'=>$pid,'ph'=>$ph,'partidos_mod'=>$mod]);
+   296	        }
+   297	
+   298	        return new WP_REST_Response([
+   299	            'grupo' => $this->grupo_info($gid),
+   300	            'reemplazos' => ['placeholder_id'=>$ph,'pareja_id'=>$pid],
+   301	            'partidos_actualizados' => $mod,
+   302	        ], 200);
+   303	    }
+   304	
+   305	    /* ===========================
+   306	     *  POST /bracket/volcar
+   307	     *  (mínimo viable; puedes ampliar después)
+   308	     * =========================== */
+   309	    public function post_bracket_volcar( WP_REST_Request $req ) {
+   310	        $cid  = (int) $req->get_param('competicion_id');
+   311	        $prop = (bool) $req->get_param('incluir_propuestos');
+   312	
+   313	        if ( $cid <= 0 ) { return new WP_Error('bad_request', 'competicion_id inválido', ['status'=>400]); }
+   314	
+   315	        // Buscar partidos de fase final
+   316	        $rondas = ['Octavos','Cuartos','Semifinal','Final','octavos','cuartos','semifinal','final'];
+   317	        $q = new WP_Query([
+   318	            'post_type'      => 'partido',
+   319	            'post_status'    => 'publish',
+   320	            'posts_per_page' => -1,
+   321	            'fields'         => 'ids',
+   322	            'meta_query'     => [
+   323	                'relation'=>'AND',
+   324	                ['key'=>'competicion_padel','value'=>$cid,'compare'=>'='],
+   325	                ['key'=>'ronda','value'=>$rondas,'compare'=>'IN'],
+   326	            ],
+   327	        ]);
+   328	        if ( ! $q->have_posts() ) {
+   329	            return new WP_REST_Response([
+   330	                'partidos_procesados'=>0,'slots_resueltos'=>0,'partidos_actualizados'=>0,'detalles'=>[]
+   331	            ], 200);
+   332	        }
+   333	
+   334	        $procesados=0; $slots=0; $actualizados=0; $detalles=[];
+   335	
+   336	        foreach ($q->posts as $match_id) {
+   337	            $procesados++;
+   338	            $slot_a = get_post_meta($match_id,'slot_a',true);
+   339	            $slot_b = get_post_meta($match_id,'slot_b',true);
+   340	            $p1     = (int) get_post_meta($match_id,'pareja_1',true);
+   341	            $p2     = (int) get_post_meta($match_id,'pareja_2',true);
+   342	
+   343	            $asig1=false; $asig2=false;
+   344	
+   345	            if ( $p1<=0 && $slot_a ) {
+   346	                $pid = $this->resolver_slot_posicional($slot_a, $cid, $prop);
+   347	                if ( $pid > 0 ) { update_post_meta($match_id,'pareja_1',$pid); $p1=$pid; $asig1=true; $slots++; }
+   348	            }
+   349	            if ( $p2<=0 && $slot_b ) {
+   350	                $pid = $this->resolver_slot_posicional($slot_b, $cid, $prop);
+   351	                if ( $pid > 0 ) { update_post_meta($match_id,'pareja_2',$pid); $p2=$pid; $asig2=true; $slots++; }
+   352	            }
+   353	            if ( $asig1 || $asig2 ) { $this->refrescar_titulo_partido($match_id); $actualizados++; }
+   354	
+   355	            $detalles[] = [
+   356	                'partido_id'=>$match_id,
+   357	                'pareja_1_asignada'=>$asig1 ? $p1 : null,
+   358	                'pareja_2_asignada'=>$asig2 ? $p2 : null,
+   359	            ];
+   360	        }
+   361	
+   362	        if ( function_exists('str_log') ) {
+   363	            str_log('GROUPS_V2/BRACKET', 'OK', ['comp'=>$cid,'procesados'=>$procesados,'slots'=>$slots,'actualizados'=>$actualizados]);
+   364	        }
+   365	
+   366	        return new WP_REST_Response([
+   367	            'partidos_procesados'=>$procesados,
+   368	            'slots_resueltos'=>$slots,
+   369	            'partidos_actualizados'=>$actualizados,
+   370	            'detalles'=>$detalles,
+   371	        ], 200);
+   372	    }
+   373	
+   374	    /* ===========================
+   375	     *  Helpers (consultas / cálculos)
+   376	     * =========================== */
+   377	
+   378	    private function listar_grupos_ids($cid) {
+   379	        $q = new WP_Query([
+   380	            'post_type'      => 'grupo',
+   381	            'post_status'    => 'publish',
+   382	            'posts_per_page' => -1,
+   383	            'fields'         => 'ids',
+   384	            'meta_key'       => 'orden',
+   385	            'orderby'        => 'meta_value_num',
+   386	            'order'          => 'ASC',
+   387	            'meta_query'     => [
+   388	                ['key'=>'competicion_id','value'=>$cid,'compare'=>'=']
+   389	            ]
+   390	        ]);
+   391	        return $q->have_posts() ? array_map('intval', $q->posts) : [];
+   392	    }
+   393	
+   394	    private function listar_grupos_competicion($cid) {
+   395	        $out = [];
+   396	        foreach ( $this->listar_grupos_ids($cid) as $gid ) {
+   397	            $out[] = $this->grupo_info($gid);
+   398	        }
+   399	        return $out;
+   400	    }
+   401	
+   402	    private function grupo_info($gid) {
+   403	        $letra = get_post_meta($gid,'letra',true);
+   404	        $tam   = (int) get_post_meta($gid,'tam',true);
+   405	        $part_ids = get_post_meta($gid,'participantes',true);
+   406	        if ( ! is_array($part_ids) ) $part_ids = [];
+   407	        $participantes = [];
+   408	        foreach ($part_ids as $pid) {
+   409	            $pid = (int) $pid; if ( ! $pid ) continue;
+   410	            $participantes[] = [
+   411	                'id'          => $pid,
+   412	                'title'       => get_the_title($pid),
+   413	                'placeholder' => (bool) get_post_meta($pid,'placeholder',true),
+   414	            ];
+   415	        }
+   416	        return [
+   417	            'id'            => (int) $gid,
+   418	            'letra'         => $letra ?: '',
+   419	            'tam'           => $tam ?: count($participantes),
+   420	            'participantes' => $participantes,
+   421	        ];
+   422	    }
+   423	
+   424	    private function listar_parejas_competicion($cid) {
+   425	        $ids = [];
+   426	
+   427	        // Meta directa
+   428	        $q1 = new WP_Query([
+   429	            'post_type'=>'pareja','post_status'=>'publish','posts_per_page'=>-1,'fields'=>'ids',
+   430	            'meta_query'=>[
+   431	                ['key'=>'competicion_id','value'=>$cid,'compare'=>'=']
+   432	            ]
+   433	        ]);
+   434	        if ( $q1->have_posts() ) $ids = array_merge($ids, $q1->posts);
+   435	
+   436	        // Compatibilidad ACF relación serializada
+   437	        $q2 = new WP_Query([
+   438	            'post_type'=>'pareja','post_status'=>'publish','posts_per_page'=>-1,'fields'=>'ids',
+   439	            'meta_query'=>[
+   440	                'relation'=>'OR',
+   441	                ['key'=>'torneo_asociado','value'=>'"'.$cid.'"','compare'=>'LIKE'],
+   442	                ['key'=>'competicion_padel','value'=>$cid,'compare'=>'='],
+   443	            ]
+   444	        ]);
+   445	        if ( $q2->have_posts() ) $ids = array_merge($ids, $q2->posts);
+   446	
+   447	        $ids = array_values( array_unique( array_map('intval', $ids) ) );
+   448	        $out = [];
+   449	        foreach ($ids as $pid) {
+   450	            $out[] = [
+   451	                'id'          => $pid,
+   452	                'title'       => get_the_title($pid),
+   453	                'placeholder' => (bool) get_post_meta($pid,'placeholder',true),
+   454	            ];
+   455	        }
+   456	        return $out;
+   457	    }
+   458	
+   459	    private function calcular_parejas_libres($todas, $grupos) {
+   460	        $asignadas = [];
+   461	        foreach ($grupos as $g) {
+   462	            foreach ( $g['participantes'] as $p ) {
+   463	                $asignadas[ (int)$p['id'] ] = true;
+   464	            }
+   465	        }
+   466	        $libres = [];
+   467	        foreach ($todas as $p) {
+   468	            if ( empty( $asignadas[ (int)$p['id'] ] ) ) { $libres[] = $p; }
+   469	        }
+   470	        return $libres;
+   471	    }
+   472	
+   473	    private function grupo_reemplazar_participante($gid, $ph, $nuevo) {
+   474	        $part_ids = get_post_meta($gid, 'participantes', true);
+   475	        if ( ! is_array($part_ids) ) $part_ids = [];
+   476	        $ok = false;
+   477	        foreach ($part_ids as $i => $val) {
+   478	            if ( (int)$val === (int)$ph ) { $part_ids[$i] = (int)$nuevo; $ok = true; break; }
+   479	        }
+   480	        if ( $ok ) update_post_meta($gid, 'participantes', array_map('intval', $part_ids) );
+   481	        return $ok;
+   482	    }
+   483	
+   484	    private function listar_partidos_de_grupo($gid) {
+   485	        $q = new WP_Query([
+   486	            'post_type'=>'partido','post_status'=>'publish','posts_per_page'=>-1,'fields'=>'ids',
+   487	            'meta_query'=>[
+   488	                ['key'=>'grupo_id','value'=>$gid,'compare'=>'=']
+   489	            ],
+   490	        ]);
+   491	        return $q->have_posts() ? array_map('intval', $q->posts) : [];
+   492	    }
+   493	
+   494	    private function contar_partido($pid, $incluir_prop=false) {
+   495	        $estado = strtolower( (string) get_post_meta($pid,'estado',true) );
+   496	        if ( $estado === 'confirmado' ) return true;
+   497	        if ( $incluir_prop && in_array($estado, ['resultado propuesto','pendiente de validación','pendiente de validacion'], true) ) return true;
+   498	        return false;
+   499	    }
+   500	
+   501	    private function leer_resultado($pid) {
+   502	        if ( function_exists('get_field') ) {
+   503	            $rows = get_field('resultado_padel', $pid);
+   504	            if ( is_array($rows) ) return $rows;
+   505	        }
+   506	        $meta = get_post_meta($pid,'resultado_padel',true);
+   507	        if ( is_array($meta) ) return $meta;
+   508	        if ( is_string($meta) && $meta!=='' ) {
+   509	            $try = json_decode($meta, true);
+   510	            if ( json_last_error()===JSON_ERROR_NONE && is_array($try) ) return $try;
+   511	            $maybe = @unserialize($meta);
+   512	            if ( $maybe !== false && is_array($maybe) ) return $maybe;
+   513	        }
+   514	        return [];
+   515	    }
+   516	
+   517	    private function aplicar_resultado( array &$stats, $p1, $p2, $rows, $ppv=3 ) {
+   518	        foreach ( [$p1,$p2] as $pid ) {
+   519	            if ( ! isset($stats[$pid]) ) $stats[$pid] = ['pj'=>0,'pg'=>0,'pp'=>0,'pts'=>0,'sets_f'=>0,'sets_c'=>0,'juegos_f'=>0,'juegos_c'=>0];
+   520	        }
+   521	        $s1=0;$s2=0;$g1=0;$g2=0;
+   522	        if ( is_array($rows) ) {
+   523	            foreach ($rows as $r) {
+   524	                $j1 = isset($r['juegos_equipo_1']) ? (int)$r['juegos_equipo_1'] : 0;
+   525	                $j2 = isset($r['juegos_equipo_2']) ? (int)$r['juegos_equipo_2'] : 0;
+   526	                if ( $j1===0 && $j2===0 ) continue;
+   527	                $g1 += $j1; $g2 += $j2;
+   528	                if ( $j1>$j2 ) $s1++; elseif ( $j2>$j1 ) $s2++;
+   529	            }
+   530	        }
+   531	        if ( $s1===0 && $s2===0 ) return false;
+   532	
+   533	        $stats[$p1]['pj']++; $stats[$p2]['pj']++;
+   534	        $stats[$p1]['sets_f'] += $s1; $stats[$p1]['sets_c'] += $s2;
+   535	        $stats[$p2]['sets_f'] += $s2; $stats[$p2]['sets_c'] += $s1;
+   536	        $stats[$p1]['juegos_f']+= $g1; $stats[$p1]['juegos_c']+= $g2;
+   537	        $stats[$p2]['juegos_f']+= $g2; $stats[$p2]['juegos_c']+= $g1;
+   538	
+   539	        if ( $s1>$s2 ) { $stats[$p1]['pg']++; $stats[$p2]['pp']++; $stats[$p1]['pts'] += $ppv; }
+   540	        elseif ( $s2>$s1 ) { $stats[$p2]['pg']++; $stats[$p1]['pp']++; $stats[$p2]['pts'] += $ppv; }
+   541	
+   542	        return true;
+   543	    }
+   544	
+   545	    public function ordenar_items($a,$b) {
+   546	        if ( $a['pts'] !== $b['pts'] ) return ($a['pts'] > $b['pts']) ? -1 : 1;
+   547	        $ad = $a['dif_sets']; $bd = $b['dif_sets']; if ( $ad !== $bd ) return ($ad>$bd)?-1:1;
+   548	        $aj = $a['dif_juegos']; $bj = $b['dif_juegos']; if ( $aj !== $bj ) return ($aj>$bj)?-1:1;
+   549	        if ( $a['pg'] !== $b['pg'] ) return ($a['pg'] > $b['pg']) ? -1 : 1;
+   550	        return 0;
+   551	    }
+   552	
+   553	    private function pareja_en_grupo($pid, $ginfo) {
+   554	        foreach ($ginfo['participantes'] as $p) { if ( (int)$p['id'] === (int)$pid ) return true; }
+   555	        return false;
+   556	    }
+   557	
+   558	    private function partidos_reemplazar_en_grupo($gid, $ph, $nuevo) {
+   559	        $q = new WP_Query([
+   560	            'post_type'=>'partido','post_status'=>'publish','posts_per_page'=>-1,'fields'=>'ids',
+   561	            'meta_query'=>[
+   562	                ['key'=>'grupo_id','value'=>$gid,'compare'=>'=']
+   563	            ],
+   564	        ]);
+   565	        if ( ! $q->have_posts() ) return 0;
+   566	        $count=0;
+   567	        foreach ($q->posts as $match_id) {
+   568	            $p1 = (int) get_post_meta($match_id,'pareja_1',true);
+   569	            $p2 = (int) get_post_meta($match_id,'pareja_2',true);
+   570	            $upd=false;
+   571	            if ( $p1 === (int)$ph ) { update_post_meta($match_id,'pareja_1',(int)$nuevo); $upd=true; }
+   572	            if ( $p2 === (int)$ph ) { update_post_meta($match_id,'pareja_2',(int)$nuevo); $upd=true; }
+   573	            if ( $upd ) { $this->refrescar_titulo_partido($match_id); $count++; }
+   574	        }
+   575	        return $count;
+   576	    }
+   577	
+   578	    private function pareja_grupo_actual($cid, $pid) {
+   579	        foreach ( $this->listar_grupos_ids($cid) as $gid ) {
+   580	            $ids = get_post_meta($gid,'participantes',true);
+   581	            if ( ! is_array($ids) ) continue;
+   582	            foreach ($ids as $x) { if ( (int)$x === (int)$pid ) return (int)$gid; }
+   583	        }
+   584	        return 0;
+   585	    }
+   586	
+   587	    private function resolver_slot_posicional($slot, $cid, $prop=false) {
+   588	        $slot = trim((string)$slot);
+   589	        if ( $slot === '' ) return 0;
+   590	        if ( ! preg_match('/^\s*(\d+)\s*º\s*(?:Grupo\s*)?([A-Z])\s*$/u', $slot, $m) ) return 0;
+   591	        $pos = (int) $m[1]; $letra = strtoupper($m[2]);
+   592	
+   593	        $gid_obj = 0;
+   594	        foreach ( $this->listar_grupos_ids($cid) as $gid ) {
+   595	            $l = strtoupper( (string) get_post_meta($gid,'letra',true) );
+   596	            if ( $l === $letra ) { $gid_obj = $gid; break; }
+   597	        }
+   598	        if ( $gid_obj <= 0 ) return 0;
+   599	
+   600	        // Standings de ese grupo
+   601	        $std = $this->get_standings( new WP_REST_Request('GET','/saas/v1/groups/standings?competicion_id='.$cid) );
+   602	        if ( $std instanceof WP_REST_Response ) {
+   603	            $data = $std->get_data();
+   604	            foreach ($data['grupos'] as $g) {
+   605	                if ( (int)$g['grupo_id'] === (int)$gid_obj ) {
+   606	                    if ( $pos >=1 && $pos <= count($g['items']) ) {
+   607	                        $item = $g['items'][$pos-1];
+   608	                        return !empty($item['placeholder']) ? 0 : (int)$item['pareja_id'];
+   609	                    }
+   610	                }
+   611	            }
+   612	        }
+   613	        return 0;
+   614	    }
+   615	
+   616	    private function refrescar_titulo_partido($match_id) {
+   617	        $p1 = (int) get_post_meta($match_id,'pareja_1',true);
+   618	        $p2 = (int) get_post_meta($match_id,'pareja_2',true);
+   619	        $r  = (string) get_post_meta($match_id,'ronda',true);
+   620	
+   621	        $t1 = $p1 ? get_the_title($p1) : '—';
+   622	        $t2 = $p2 ? get_the_title($p2) : '—';
+   623	        $title = ( $r ? $r . ': ' : '' ) . $t1 . ' vs ' . $t2;
+   624	
+   625	        wp_update_post(['ID'=>$match_id,'post_title'=>$title]);
+   626	        return true;
+   627	    }
+   628	
+   629	}

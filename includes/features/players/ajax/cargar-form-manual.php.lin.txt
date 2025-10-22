@@ -1,0 +1,42 @@
+     1	<?php
+     2	// antiguo /includes/ajax/ajax-cargar-form-invitacion-manual.php
+     3	
+     4	add_action('wp_ajax_str_cargar_form_invitacion_manual', 'str_ajax_cargar_form_invitacion_manual');
+     5	add_action('wp_ajax_nopriv_str_cargar_form_invitacion_manual', 'str_ajax_cargar_form_invitacion_manual');
+     6	
+     7	function str_ajax_cargar_form_invitacion_manual() {
+     8	    // Sanea y recoge el torneo_id enviado por AJAX (si llega)
+     9	    $torneo_id = isset($_POST['torneo_id']) ? intval($_POST['torneo_id']) : 0;
+    10	
+    11	    ob_start();
+    12	    ?>
+    13	    <!-- Enlaza aquí el CSS personalizado para el formulario manual -->
+    14	    <link rel="stylesheet" href="<?php echo esc_url(STR_PLUGIN_URL . 'assets/css/form-invitacion-jugador-manual.css'); ?>">
+    15	
+    16	    <form id="form-invitacion-jugador-manual" autocomplete="off" class="form-invitacion-jugador-manual">
+    17	        <div class="form-group">
+    18	            <label>Nombre*</label>
+    19	            <input type="text" name="nombre" required>
+    20	        </div>
+    21	        <div class="form-group">
+    22	            <label>Apellidos*</label>
+    23	            <input type="text" name="apellidos" required>
+    24	        </div>
+    25	        <div class="form-group">
+    26	            <label>Email*</label>
+    27	            <input type="email" name="email" required>
+    28	        </div>
+    29	        <div class="form-group">
+    30	            <label>Teléfono</label>
+    31	            <input type="text" name="telefono">
+    32	        </div>
+    33	        <input type="hidden" name="torneo_id" id="inv-torneo-id-manual" value="<?php echo esc_attr($torneo_id); ?>">
+    34	        <button type="submit" id="btn-enviar-invitacion-jugador-manual" class="btn-enviar-invitacion">Guardar jugador</button>
+    35	        <div id="mensaje-invitacion-jugador-manual" style="margin-top:8px;"></div>
+    36	    </form>
+    37	    <?php
+    38	
+    39	    $html = ob_get_clean();
+    40	    wp_send_json_success(['html' => $html]);
+    41	    exit;
+    42	}

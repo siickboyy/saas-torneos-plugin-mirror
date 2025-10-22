@@ -1,0 +1,206 @@
+     1	/* globals strTorneoV2 */
+     2	(function(){
+     3	  "use strict";
+     4	
+     5	  if (!window.strTorneoV2) { console.warn('[GROUPS v2] strTorneoV2 no definido'); return; }
+     6	  const cfg = window.strTorneoV2;
+     7	  const REST = cfg.restBase.replace(/\/+$/,''); // .../wp-json/saas/v1
+     8	  const CID  = parseInt(cfg.competicionId||0,10);
+     9	  const RID  = cfg.reqId || ('r'+Math.random().toString(36).slice(2,8));
+    10	
+    11	  const H = (html) => html; // sugar
+    12	  const $ = (sel) => document.querySelector(sel);
+    13	  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+    14	
+    15	  async function restGet(path){
+    16	    const res = await fetch(REST + path, { credentials:'same-origin' });
+    17	    const ct  = res.headers.get('content-type')||'';
+    18	    if (!ct.includes('application/json')) {
+    19	      const raw = await res.text();
+    20	      console.error('[GROUPS v2] RAW (no JSON):', raw);
+    21	      throw new Error('Respuesta no JSON (GET '+path+')');
+    22	    }
+    23	    return await res.json();
+    24	  }
+    25	  async function restPost(path, data){
+    26	    const res = await fetch(REST + path, {
+    27	      method: 'POST',
+    28	      headers: {
+    29	        'Content-Type':'application/json',
+    30	        'X-WP-Nonce': cfg.restNonce || '',
+    31	      },
+    32	      credentials:'same-origin',
+    33	      body: JSON.stringify(data||{})
+    34	    });
+    35	    const ct  = res.headers.get('content-type')||'';
+    36	    if (!ct.includes('application/json')) {
+    37	      const raw = await res.text();
+    38	      console.error('[GROUPS v2] RAW (no JSON):', raw);
+    39	      throw new Error('Respuesta no JSON (POST '+path+')');
+    40	    }
+    41	    const json = await res.json();
+    42	    if (!res.ok) {
+    43	      const msg = (json && json.message) ? json.message : 'Error AJAX (success=false)';
+    44	      throw new Error(msg);
+    45	    }
+    46	    return json;
+    47	  }
+    48	
+    49	  const state = { meta:{}, grupos:[], libres:[] };
+    50	
+    51	  function renderGrupos(){
+    52	    const wrap = $('#str-gestion-grupos');
+    53	    if (!wrap) return;
+    54	    const libresOpt = state.libres.map(p=>`<option value="${p.id}">${escapeHTML(p.title||'Pareja')}</option>`).join('');
+    55	
+    56	    const cards = state.grupos.map(g=>{
+    57	      const rows = (g.participantes||[]).map(p=>{
+    58	        if (p.placeholder) {
+    59	          return `
+    60	          <li class="str-row placeholder">
+    61	            <div class="str-pair-name"><span class="badge">Placeholder</span></div>
+    62	            <div class="str-actions">
+    63	              <select class="str-pair-select" data-grupo="${g.id}">
+    64	                <option value="">— Seleccionar pareja —</option>
+    65	                ${libresOpt}
+    66	              </select>
+    67	              <button class="str-btn str-btn-small str-btn-assign" data-grupo="${g.id}" data-ph="${p.id}" type="button">Asignar</button>
+    68	            </div>
+    69	          </li>`;
+    70	        }
+    71	        return `
+    72	        <li class="str-row">
+    73	          <div class="str-pair-name">${escapeHTML(p.title||'Pareja')}</div>
+    74	          <div class="str-actions"><span class="pill pill-ok">Asignada</span></div>
+    75	        </li>`;
+    76	      }).join('');
+    77	
+    78	      return `
+    79	      <div class="str-card grupo">
+    80	        <div class="str-card-head">
+    81	          <div class="title">Grupo <b>${escapeHTML(g.letra||'?')}</b></div>
+    82	          <div class="sub">Capacidad: ${g.tam} · Ocupadas: ${(g.participantes||[]).filter(x=>!x.placeholder).length}</div>
+    83	        </div>
+    84	        <ul class="str-list">${rows || `<li class="str-row"><em>Sin participantes</em></li>`}</ul>
+    85	      </div>`;
+    86	    }).join('');
+    87	
+    88	    wrap.innerHTML = `
+    89	      <div class="str-groups-header">
+    90	        <div class="str-groups-meta">
+    91	          <span><b>Grupos:</b> ${state.grupos.length}</span>
+    92	          <span><b>Parejas totales (aprox):</b> ${state.meta.n_parejas || '-'}</span>
+    93	          <span><b>Fase final:</b> ${escapeHTML(state.meta.fase_final||'-')}</span>
+    94	          <span><b>Modo final:</b> ${escapeHTML(state.meta.modo_final||'-')}</span>
+    95	        </div>
+    96	        <div class="str-groups-actions">
+    97	          <button class="str-btn" id="btn-v2-recalc" type="button">Recalcular clasificación</button>
+    98	          <button class="str-btn str-btn-primary" id="btn-v2-auto" type="button">Rellenar aleatoriamente</button>
+    99	        </div>
+   100	      </div>
+   101	      <div class="str-grid-groups">${cards}</div>`;
+   102	
+   103	    const btnAuto  = $('#btn-v2-auto');
+   104	    const btnRecal = $('#btn-v2-recalc');
+   105	    if (btnAuto)  btnAuto.addEventListener('click', onAutoAssign);
+   106	    if (btnRecal) btnRecal.addEventListener('click', cargarStandings);
+   107	
+   108	    $$('.str-btn-assign').forEach(btn=>{
+   109	      btn.addEventListener('click', async ()=>{
+   110	        try {
+   111	          const gid = parseInt(btn.getAttribute('data-grupo'),10);
+   112	          const ph  = parseInt(btn.getAttribute('data-ph'),10);
+   113	          const sel = btn.parentElement.querySelector('.str-pair-select');
+   114	          const pid = sel ? parseInt(sel.value,10) : 0;
+   115	          if (!pid) { alert('Selecciona una pareja'); return; }
+   116	          btn.disabled = true; btn.textContent = 'Asignando...';
+   117	          await restPost(`/group/${gid}/assign`, {competicion_id:CID, pareja_id:pid, placeholder_id:ph});
+   118	          await Promise.all([cargarGrupos(), cargarStandings()]);
+   119	        } catch (e) {
+   120	          console.error(e); alert(e.message||'Error al asignar');
+   121	        } finally {
+   122	          btn.disabled=false; btn.textContent='Asignar';
+   123	        }
+   124	      });
+   125	    });
+   126	  }
+   127	
+   128	  function renderStandings(data){
+   129	    const wrap = $('#str-standings');
+   130	    if (!wrap) return;
+   131	    if (!data || !Array.isArray(data.grupos) || data.grupos.length===0) {
+   132	      wrap.innerHTML = `<div class="str-card"><div class="str-card-body"><em>No hay standings todavía.</em></div></div>`;
+   133	      return;
+   134	    }
+   135	    const tables = data.grupos.map(g=>{
+   136	      const rows = (g.items||[]).map((it,i)=>`
+   137	        <tr>
+   138	          <td>${i+1}</td>
+   139	          <td>${escapeHTML(it.title||'Pareja')}${it.placeholder? ' <span class="badge">PH</span>':''}</td>
+   140	          <td>${it.pj}</td><td>${it.pg}</td><td>${it.pp}</td>
+   141	          <td><b>${it.pts}</b></td>
+   142	          <td>${it.sets_f}-${it.sets_c}</td>
+   143	          <td>${it.juegos_f}-${it.juegos_c}</td>
+   144	        </tr>
+   145	      `).join('');
+   146	      return `
+   147	        <div class="str-card standings">
+   148	          <div class="str-card-head"><div class="title">Clasificación · Grupo <b>${escapeHTML(g.letra||'?')}</b></div></div>
+   149	          <div class="str-table-wrap">
+   150	            <table class="str-table">
+   151	              <thead><tr><th>#</th><th>Pareja</th><th>PJ</th><th>PG</th><th>PP</th><th>Pts</th><th>Sets</th><th>Juegos</th></tr></thead>
+   152	              <tbody>${rows || `<tr><td colspan="8"><em>Sin datos</em></td></tr>`}</tbody>
+   153	            </table>
+   154	          </div>
+   155	        </div>`;
+   156	    }).join('');
+   157	    wrap.innerHTML = tables;
+   158	  }
+   159	
+   160	  async function cargarGrupos(){
+   161	    const data = await restGet(`/groups?competicion_id=${CID}&rid=${encodeURIComponent(RID)}`);
+   162	    state.meta   = data.meta || {};
+   163	    state.grupos = Array.isArray(data.grupos) ? data.grupos : [];
+   164	    state.libres = Array.isArray(data.parejas_libres) ? data.parejas_libres : [];
+   165	    renderGrupos();
+   166	  }
+   167	
+   168	  async function cargarStandings(){
+   169	    const data = await restGet(`/groups/standings?competicion_id=${CID}&rid=${encodeURIComponent(RID)}`);
+   170	    renderStandings(data);
+   171	  }
+   172	
+   173	  async function onAutoAssign(){
+   174	    const btn = $('#btn-v2-auto');
+   175	    if (btn) { btn.disabled = true; btn.textContent = 'Rellenando...'; }
+   176	    try {
+   177	      await restPost('/groups/auto-assign', {competicion_id: CID});
+   178	      await Promise.all([cargarGrupos(), cargarStandings()]);
+   179	    } catch (e) {
+   180	      console.error(e); alert(e.message||'No se pudo completar automáticamente');
+   181	    } finally {
+   182	      if (btn) { btn.disabled=false; btn.textContent='Rellenar aleatoriamente'; }
+   183	    }
+   184	  }
+   185	
+   186	  function escapeHTML(str){
+   187	    if (str==null) return '';
+   188	    return String(str).replace(/[&<>"']/g, function(m){
+   189	      return ({
+   190	        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+   191	      })[m] || m;
+   192	    });
+   193	  }
+   194	
+   195	  document.addEventListener('DOMContentLoaded', async ()=>{
+   196	    if (!CID) return;
+   197	    try {
+   198	      await cargarGrupos();
+   199	      await cargarStandings();
+   200	    } catch (e) {
+   201	      console.error('[GROUPS v2] init error', e);
+   202	      alert(e.message || 'Error inicial (v2)');
+   203	    }
+   204	  });
+   205	
+   206	})();

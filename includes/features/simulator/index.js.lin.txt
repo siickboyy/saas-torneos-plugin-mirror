@@ -1,0 +1,268 @@
+     1	// /assets/js/simulador-torneo.js
+     2	// Versión: siempre "por parejas" (sin selector de tipo) y sin campo de pistas.
+     3	// Añadido: botón "Crear competición" -> guarda snapshot y redirige a /crear-competicion/?simulacion_id=ID
+     4	
+     5	jQuery(document).ready(function($) {
+     6	    var $form = $('#form-simulador-torneo');
+     7	    var $msg  = $('#simulador-msg-sugerencias');
+     8	    var $res  = $('#simulador-resultados');
+     9	    var $acciones = $('#simulador-acciones');
+    10	    var $btnCrear = $('#btn-crear-competicion');
+    11	
+    12	    // Estado local de la última simulación (para guardar snapshot con coherencia)
+    13	    var lastSimParams = null;   // { n_jugadores, n_grupos, fase_final, organizar_final }
+    14	    var lastSimOK = false;      // si hubo resultados HTML válidos
+    15	
+    16	    function limpiarUI() {
+    17	        $msg.html('');
+    18	        $res.html('');
+    19	        $acciones.hide();
+    20	        lastSimOK = false;
+    21	        lastSimParams = null;
+    22	    }
+    23	
+    24	    function ponerLoader() {
+    25	        $res.html('<div style="color:#3273f8;font-weight:500;margin:24px 0;">Calculando simulación...</div>');
+    26	    }
+    27	
+    28	    function scrollToMensajes() {
+    29	        var top = $msg.offset() ? $msg.offset().top - 70 : 0;
+    30	        if (top > 0) {
+    31	            window.scrollTo({ top: top, behavior: 'smooth' });
+    32	        }
+    33	    }
+    34	
+    35	    // Envío principal del simulador
+    36	    $form.on('submit', function(e) {
+    37	        e.preventDefault();
+    38	
+    39	        limpiarUI();
+    40	
+    41	        // Recoger datos del formulario
+    42	        var n_jugadores_raw = $('#simulador_n_jugadores').val();
+    43	        var n_jugadores     = parseInt(n_jugadores_raw, 10);
+    44	        var n_grupos_val    = $('#simulador_n_grupos').val();
+    45	        var n_grupos        = parseInt(n_grupos_val, 10) || ''; // puede venir vacío
+    46	        var fase_final      = $('#simulador_fase_final').val(); // 'final' | 'semifinal' | 'cuartos' | 'octavos'
+    47	        var organizar_final = $('input[name="simulador_organizar_final"]:checked').val(); // 'premios_grupo' | 'mezclar'
+    48	
+    49	        // Validación frontend básica
+    50	        if (!n_jugadores || n_jugadores < 2) {
+    51	            $msg.html('<span class="msg-error" style="color:#d9534f;">Introduce un número de jugadores válido (mínimo 2).</span>');
+    52	            scrollToMensajes();
+    53	            return;
+    54	        }
+    55	
+    56	        ponerLoader();
+    57	
+    58	        var $submitBtn = $form.find('button[type="submit"]');
+    59	        var oldText = $submitBtn.text();
+    60	        $submitBtn.prop('disabled', true).text('Simulando...');
+    61	
+    62	        // Llamada AJAX a WP (ya no enviamos tipo_torneo ni n_pistas)
+    63	        $.ajax({
+    64	            url: (typeof str_ajax_obj !== 'undefined') ? str_ajax_obj.ajax_url : '',
+    65	            type: 'POST',
+    66	            dataType: 'json',
+    67	            data: {
+    68	                action: 'str_simular_torneo',
+    69	                n_jugadores: n_jugadores,
+    70	                n_grupos: n_grupos,
+    71	                fase_final: fase_final,
+    72	                organizar_final: organizar_final,
+    73	                _ajax_nonce: (typeof str_ajax_obj !== 'undefined') ? str_ajax_obj.nonce : ''
+    74	            }
+    75	        })
+    76	        .done(function(resp) {
+    77	            if (resp && resp.success && resp.data) {
+    78	                // Mensajes educativos / advertencias
+    79	                if (resp.data.sugerencias) {
+    80	                    $msg.html(resp.data.sugerencias);
+    81	                    scrollToMensajes();
+    82	                } else {
+    83	                    $msg.html('');
+    84	                }
+    85	
+    86	                // Resultados (si hay incompatibilidad vendrá vacío)
+    87	                if (resp.data.resultados_html) {
+    88	                    $res.html(resp.data.resultados_html);
+    89	                    // Guardamos estado de la última simulación (para crear competición)
+    90	                    lastSimParams = {
+    91	                        n_jugadores: n_jugadores,
+    92	                        n_grupos: (resp.data.n_grupos_actual || n_grupos || ''),
+    93	                        fase_final: fase_final,
+    94	                        organizar_final: organizar_final
+    95	                    };
+    96	                    lastSimOK = true;
+    97	                    $acciones.show(); // habilitamos barra con "Crear competición"
+    98	                } else {
+    99	                    lastSimOK = false;
+   100	                    lastSimParams = {
+   101	                        n_jugadores: n_jugadores,
+   102	                        n_grupos: (resp.data && resp.data.n_grupos_actual) ? resp.data.n_grupos_actual : (n_grupos || ''),
+   103	                        fase_final: fase_final,
+   104	                        organizar_final: organizar_final
+   105	                    };
+   106	                    // Si no hay resultados, ocultamos el CTA de crear competición
+   107	                    $acciones.hide();
+   108	                    if (!resp.data.sugerencias) {
+   109	                        $res.html('<div style="color:#d9534f;">No se pudieron calcular resultados.</div>');
+   110	                    } else {
+   111	                        $res.html(''); // dejamos libre para leer el aviso
+   112	                    }
+   113	                }
+   114	            } else {
+   115	                var msg = (resp && resp.data && resp.data.msg) ? resp.data.msg : 'Error inesperado.';
+   116	                $res.html('<div style="color:#d9534f;">' + msg + '</div>');
+   117	                $acciones.hide();
+   118	                lastSimOK = false;
+   119	                lastSimParams = null;
+   120	            }
+   121	        })
+   122	        .fail(function() {
+   123	            $res.html('<div style="color:#d9534f;">Error de conexión AJAX.</div>');
+   124	            $acciones.hide();
+   125	            lastSimOK = false;
+   126	            lastSimParams = null;
+   127	        })
+   128	        .always(function() {
+   129	            $submitBtn.prop('disabled', false).text(oldText);
+   130	        });
+   131	    });
+   132	
+   133	    // ─────────────────────────────────────────────────────────────────────────
+   134	    // Utilidades
+   135	    // ─────────────────────────────────────────────────────────────────────────
+   136	
+   137	    /**
+   138	     * Participantes competitivos actuales (SIEMPRE por parejas):
+   139	     * total_competitivos = floor(n_jugadores / 2)
+   140	     */
+   141	    function participantesCompetitivos(n_jugadores) {
+   142	        return Math.floor((parseInt(n_jugadores, 10) || 0) / 2);
+   143	    }
+   144	
+   145	    // Si no hay nº de grupos, estimamos como hace el backend (objetivo 4 por grupo)
+   146	    function estimarNumGruposSiVacio(n_grupos, total_participantes) {
+   147	        if (n_grupos && parseInt(n_grupos, 10) > 0) return parseInt(n_grupos, 10);
+   148	        return Math.max(1, Math.ceil(total_participantes / 4));
+   149	    }
+   150	
+   151	    // ─────────────────────────────────────────────────────────────────────────
+   152	    // CTAs dinámicos en el aviso (incompatibilidades)
+   153	    // ─────────────────────────────────────────────────────────────────────────
+   154	
+   155	    // 1) 📈 Añadir participantes y re-simular (manteniendo fijo el nº de grupos efectivo)
+   156	    $(document).on('click', '.str-btn-ajustar-jugadores', function() {
+   157	        var $btn = $(this);
+   158	
+   159	        // Requisitos mínimos por grupo para la fase elegida (del backend)
+   160	        var minPorGrupo = parseInt($btn.data('min-por-grupo'), 10) || 0;
+   161	        // Nº de grupos efectivo usado en la simulación (para fijarlo y evitar el bucle)
+   162	        var gEfectivo   = parseInt($btn.data('g-efectivo'), 10) || 0;
+   163	
+   164	        // Leer estado actual del formulario
+   165	        var n_jugadores  = parseInt($('#simulador_n_jugadores').val(), 10) || 0;
+   166	        var n_grupos_raw = $('#simulador_n_grupos').val();
+   167	        var n_grupos     = parseInt(n_grupos_raw, 10) || 0;
+   168	
+   169	        // Determinar "G fijo" a usar:
+   170	        var total_competitivos = participantesCompetitivos(n_jugadores);
+   171	        var grupos_efectivos = gEfectivo || n_grupos || estimarNumGruposSiVacio(n_grupos, total_competitivos);
+   172	
+   173	        // Fijamos el nº de grupos en el formulario
+   174	        $('#simulador_n_grupos').val(grupos_efectivos);
+   175	
+   176	        // Participantes competitivos totales requeridos
+   177	        var total_competitivos_requeridos = minPorGrupo * grupos_efectivos;
+   178	        var n_jugadores_requeridos = total_competitivos_requeridos * 2;
+   179	
+   180	        var nuevo_valor = Math.max(n_jugadores, n_jugadores_requeridos);
+   181	        if (!nuevo_valor || nuevo_valor < 2) nuevo_valor = 2;
+   182	
+   183	        $('#simulador_n_jugadores').val(nuevo_valor);
+   184	
+   185	        // Re-simular automáticamente
+   186	        $form.trigger('submit');
+   187	    });
+   188	
+   189	    // 2) 🔄 Cambiar a fase compatible y re-simular
+   190	    $(document).on('click', '.str-btn-ajustar-fase', function() {
+   191	        var faseCompatible = $(this).data('fase-compatible'); // 'final' | 'semifinal' | 'cuartos' | 'octavos'
+   192	        if (faseCompatible) {
+   193	            $('#simulador_fase_final').val(String(faseCompatible));
+   194	        }
+   195	        // Re-simular automáticamente
+   196	        $form.trigger('submit');
+   197	    });
+   198	
+   199	    // 3) 🧩 Ajustar a N grupos y re-simular
+   200	    $(document).on('click', '.str-btn-ajustar-grupos', function() {
+   201	        var gruposRecomendados = parseInt($(this).data('grupos-recomendados'), 10) || 0;
+   202	        if (gruposRecomendados > 0) {
+   203	            $('#simulador_n_grupos').val(gruposRecomendados);
+   204	        }
+   205	        // Re-simular automáticamente
+   206	        $form.trigger('submit');
+   207	    });
+   208	
+   209	    // ─────────────────────────────────────────────────────────────────────────
+   210	    // NUEVO: Crear competición desde la simulación
+   211	    // ─────────────────────────────────────────────────────────────────────────
+   212	    $btnCrear.on('click', function(e) {
+   213	        e.preventDefault();
+   214	
+   215	        // Comprobamos que existe una simulación válida previa
+   216	        if (!lastSimParams || !lastSimParams.n_jugadores) {
+   217	            $msg.html('<span class="msg-error" style="color:#d9534f;">Primero simula el torneo para poder crear la competición.</span>');
+   218	            scrollToMensajes();
+   219	            return;
+   220	        }
+   221	
+   222	        // Opcional: si no hay resultados válidos, avisamos (permitimos continuar si así lo decides)
+   223	        if (!lastSimOK) {
+   224	            $msg.append('<div class="msg-warning" style="color:#e5771a;margin-top:6px;">⚠ Estás creando la competición sin resultados visualizados. Continuará con la última configuración introducida.</div>');
+   225	            scrollToMensajes();
+   226	        }
+   227	
+   228	        // Botón en estado cargando
+   229	        var oldText = $btnCrear.text();
+   230	        $btnCrear.prop('disabled', true).text('Preparando…');
+   231	
+   232	        // Enviamos al backend para que guarde SNAPSHOT coherente y devuelva simulacion_id
+   233	        $.ajax({
+   234	            url: (typeof str_ajax_obj !== 'undefined') ? str_ajax_obj.ajax_url : '',
+   235	            type: 'POST',
+   236	            dataType: 'json',
+   237	            data: {
+   238	                action: 'str_guardar_simulacion',
+   239	                n_jugadores: lastSimParams.n_jugadores,
+   240	                n_grupos: lastSimParams.n_grupos || '',
+   241	                fase_final: lastSimParams.fase_final,
+   242	                organizar_final: lastSimParams.organizar_final,
+   243	                _ajax_nonce: (typeof str_ajax_obj !== 'undefined') ? str_ajax_obj.nonce : ''
+   244	            }
+   245	        })
+   246	        .done(function(resp) {
+   247	            if (resp && resp.success && resp.data && resp.data.simulacion_id) {
+   248	                // Redirigimos a la página de creación con simulacion_id
+   249	                var baseURL = (typeof str_ajax_obj !== 'undefined' && str_ajax_obj.crear_competicion_url) ? str_ajax_obj.crear_competicion_url : '/crear-competicion/';
+   250	                // Pasamos flags para prefill (si los necesitas en tu shortcode)
+   251	                var url = baseURL + (baseURL.indexOf('?') === -1 ? '?' : '&') +
+   252	                          'simulacion_id=' + encodeURIComponent(resp.data.simulacion_id) +
+   253	                          '&prefill=1';
+   254	                window.location.href = url;
+   255	            } else {
+   256	                var msg = (resp && resp.data && resp.data.msg) ? resp.data.msg : 'No se pudo guardar la simulación.';
+   257	                $msg.html('<span class="msg-error" style="color:#d9534f;">' + msg + '</span>');
+   258	                scrollToMensajes();
+   259	                $btnCrear.prop('disabled', false).text(oldText);
+   260	            }
+   261	        })
+   262	        .fail(function() {
+   263	            $msg.html('<span class="msg-error" style="color:#d9534f;">Error de conexión al guardar la simulación.</span>');
+   264	            scrollToMensajes();
+   265	            $btnCrear.prop('disabled', false).text(oldText);
+   266	        });
+   267	    });
+   268	});

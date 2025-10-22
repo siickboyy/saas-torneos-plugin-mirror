@@ -1,0 +1,25 @@
+     1	<?php
+     2	// /includes/forms/form-invitacion-jugador-manual.php
+     3	?>
+     4	
+     5	<form id="form-invitacion-jugador-manual" autocomplete="off" style="padding: 10px;">
+     6	    <div>
+     7	        <label>Nombre*</label>
+     8	        <input type="text" name="nombre" required>
+     9	    </div>
+    10	    <div>
+    11	        <label>Apellidos*</label>
+    12	        <input type="text" name="apellidos" required>
+    13	    </div>
+    14	    <div>
+    15	        <label>Email*</label>
+    16	        <input type="email" name="email" required>
+    17	    </div>
+    18	    <div>
+    19	        <label>Teléfono</label>
+    20	        <input type="text" name="telefono">
+    21	    </div>
+    22	    <input type="hidden" name="torneo_id" id="inv-torneo-id-manual" value="">
+    23	    <button type="submit" id="btn-enviar-invitacion-jugador-manual">Guardar jugador</button>
+    24	    <div id="mensaje-invitacion-jugador-manual" style="margin-top:8px;"></div>
+    25	</form>

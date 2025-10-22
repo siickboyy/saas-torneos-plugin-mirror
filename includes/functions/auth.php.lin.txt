@@ -1,0 +1,67 @@
+     1	<?php
+     2	/**
+     3	 * Lógica personalizada de login frontend
+     4	 */
+     5	
+     6	function str_procesar_login_frontend() {
+     7	    if (!isset($_POST['str_login_frontend'])) return;
+     8	
+     9	    $creds = [
+    10	        'user_login'    => sanitize_user($_POST['log']),
+    11	        'user_password' => $_POST['pwd'],
+    12	        'remember'      => true
+    13	    ];
+    14	
+    15	    $user = wp_signon($creds, false);
+    16	
+    17	    if (is_wp_error($user)) {
+    18	        wp_redirect(add_query_arg('login', 'failed', wp_get_referer()));
+    19	        exit;
+    20	    }
+    21	
+    22	    // Redirección según rol
+    23	    if (in_array('cliente', $user->roles)) {
+    24	        wp_redirect(home_url('/mis-competiciones'));
+    25	    } elseif (in_array('jugador', $user->roles)) {
+    26	        wp_redirect(home_url('/zona-jugador'));
+    27	    } else {
+    28	        wp_redirect(admin_url()); // Admin
+    29	    }
+    30	
+    31	    exit;
+    32	}
+    33	add_action('init', 'str_procesar_login_frontend');
+    34	
+    35	function str_procesar_registro_cliente() {
+    36	    if (!isset($_POST['str_registro_cliente'])) return;
+    37	
+    38	    $username = sanitize_user($_POST['str_username']);
+    39	    $email    = sanitize_email($_POST['str_email']);
+    40	    $password = $_POST['str_password'];
+    41	
+    42	    if (username_exists($username) || email_exists($email)) {
+    43	        wp_redirect(add_query_arg('registro', 'fallido', wp_get_referer()));
+    44	        exit;
+    45	    }
+    46	
+    47	    $user_id = wp_create_user($username, $password, $email);
+    48	
+    49	    if (is_wp_error($user_id)) {
+    50	        wp_redirect(add_query_arg('registro', 'fallido', wp_get_referer()));
+    51	        exit;
+    52	    }
+    53	
+    54	    // Asignar rol cliente
+    55	    wp_update_user([
+    56	        'ID' => $user_id,
+    57	        'role' => 'cliente'
+    58	    ]);
+    59	
+    60	    // Loguear y redirigir
+    61	    wp_set_current_user($user_id);
+    62	    wp_set_auth_cookie($user_id);
+    63	
+    64	    wp_redirect(home_url('/mis-competiciones'));
+    65	    exit;
+    66	}
+    67	add_action('init', 'str_procesar_registro_cliente');

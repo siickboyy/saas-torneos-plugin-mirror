@@ -1,0 +1,125 @@
+     1	<?php
+     2	/**
+     3	 * Handler AJAX: Eliminar grupo (envía a papelera)
+     4	 * Alias compatible: str_grupo_eliminar  → apunta a saas_grupo_eliminar
+     5	 *
+     6	 * Seguridad:
+     7	 *   - Nonce: check_ajax_referer('str_nonce', '_ajax_nonce')
+     8	 *   - Permisos: admin o rol 'cliente' (o bien delete_post sobre el grupo)
+     9	 *
+    10	 * Comportamiento:
+    11	 *   - Si el grupo tiene participantes, se vacía el ACF 'participantes_grupo'
+    12	 *     antes de mandarlo a la papelera.
+    13	 *   - Respuesta JSON con éxito o error detallado.
+    14	 */
+    15	
+    16	if (!defined('ABSPATH')) { exit; }
+    17	
+    18	if (!function_exists('saas_grupo_eliminar')) {
+    19	    function saas_grupo_eliminar() {
+    20	
+    21	        // Helpers de logging (mismo formato que el resto del módulo)
+    22	        if (!function_exists('str_escribir_log')) {
+    23	            function str_escribir_log($m, $o='GROUPS:DELETE') {
+    24	                $ruta = defined('STR_PLUGIN_PATH') ? STR_PLUGIN_PATH . 'debug-saas-torneos.log' : __DIR__ . '/debug-saas-torneos.log';
+    25	                if (!is_string($m)) { $m = print_r($m, true); }
+    26	                @file_put_contents($ruta, "[".date('Y-m-d H:i:s')."] [$o] $m\n", FILE_APPEND);
+    27	            }
+    28	        }
+    29	
+    30	        try {
+    31	            // === Nonce ===
+    32	            if (!isset($_POST['_ajax_nonce'])) {
+    33	                str_escribir_log('Nonce ausente');
+    34	                wp_send_json_error(['message' => 'Nonce ausente.'], 400);
+    35	            }
+    36	            check_ajax_referer('str_nonce', '_ajax_nonce');
+    37	
+    38	            $comp_id  = isset($_POST['competicion_id']) ? absint($_POST['competicion_id']) : 0;
+    39	            $grupo_id = isset($_POST['grupo_id'])       ? absint($_POST['grupo_id'])       : 0;
+    40	
+    41	            if (!$grupo_id) {
+    42	                wp_send_json_error(['message' => 'ID de grupo inválido.'], 400);
+    43	            }
+    44	
+    45	            $grupo = get_post($grupo_id);
+    46	            if (!$grupo || $grupo->post_type !== 'grupo') {
+    47	                wp_send_json_error(['message' => 'El post indicado no es un grupo válido.'], 404);
+    48	            }
+    49	
+    50	            // === Permisos ===
+    51	            $ok_caps = (is_user_logged_in() && (current_user_can('administrator') || current_user_can('cliente'))) || current_user_can('delete_post', $grupo_id);
+    52	            if (!$ok_caps) {
+    53	                wp_send_json_error(['message' => 'Permisos insuficientes.'], 403);
+    54	            }
+    55	
+    56	            // === Si pasaron competicion_id, validamos pertenencia ===
+    57	            if ($comp_id) {
+    58	                // Reutilizamos helper si existe
+    59	                $belongs = true;
+    60	                if (function_exists('get_field')) {
+    61	                    $raw = get_field('torneo_asociado', $grupo_id);
+    62	                } else {
+    63	                    $raw = get_post_meta($grupo_id, 'torneo_asociado', true);
+    64	                }
+    65	
+    66	                // Normaliza a array de IDs
+    67	                $ids = [];
+    68	                if (!empty($raw)) {
+    69	                    if (is_array($raw)) {
+    70	                        foreach ($raw as $it) {
+    71	                            if (is_numeric($it))        $ids[] = (int)$it;
+    72	                            elseif (is_array($it) && isset($it['ID'])) $ids[] = (int)$it['ID'];
+    73	                            elseif (is_object($it) && isset($it->ID))  $ids[] = (int)$it->ID;
+    74	                        }
+    75	                    } elseif (is_numeric($raw)) {
+    76	                        $ids[] = (int)$raw;
+    77	                    }
+    78	                }
+    79	                $belongs = in_array($comp_id, array_unique($ids), true);
+    80	
+    81	                if (!$belongs) {
+    82	                    wp_send_json_error(['message' => 'El grupo no pertenece a esta competición.'], 400);
+    83	                }
+    84	            }
+    85	
+    86	            // === Vaciamos participantes (si los hubiera) para dejar todo consistente ===
+    87	            $participantes = function_exists('get_field')
+    88	                ? get_field('participantes_grupo', $grupo_id, false)
+    89	                : get_post_meta($grupo_id, 'participantes_grupo', true);
+    90	
+    91	            if (!empty($participantes)) {
+    92	                if (function_exists('update_field')) {
+    93	                    @update_field('participantes_grupo', [], $grupo_id);
+    94	                } else {
+    95	                    update_post_meta($grupo_id, 'participantes_grupo', []);
+    96	                }
+    97	            }
+    98	
+    99	            // === Papelera (idempotente) ===
+   100	            $status = get_post_status($grupo_id);
+   101	            if ($status === 'trash') {
+   102	                str_escribir_log("Ya estaba en papelera grupo_id=$grupo_id");
+   103	            } else {
+   104	                $trashed = wp_trash_post($grupo_id);
+   105	                if (!$trashed || is_wp_error($trashed)) {
+   106	                    $msg = is_wp_error($trashed) ? $trashed->get_error_message() : 'Error desconocido en wp_trash_post.';
+   107	                    str_escribir_log("ERROR al enviar a papelera grupo_id=$grupo_id | $msg");
+   108	                    wp_send_json_error(['message' => 'No se pudo eliminar el grupo.'], 400);
+   109	                }
+   110	            }
+   111	
+   112	            str_escribir_log("OK eliminado (papelera) grupo_id=$grupo_id comp_id=$comp_id actor=".get_current_user_id());
+   113	
+   114	            wp_send_json_success([
+   115	                'message'  => 'Grupo eliminado correctamente.',
+   116	                'grupo_id' => $grupo_id,
+   117	                'comp_id'  => $comp_id,
+   118	            ]);
+   119	
+   120	        } catch (\Throwable $e) {
+   121	            str_escribir_log('EXCEPTION '.$e->getMessage());
+   122	            wp_send_json_error(['message' => 'Excepción al eliminar el grupo.'], 500);
+   123	        }
+   124	    }
+   125	}

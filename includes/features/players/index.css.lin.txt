@@ -1,0 +1,287 @@
+     1	/* Antiguo /assets/css/form-invitacion-jugador.css */
+     2	
+     3	.modal-invitacion-jugador-overlay {
+     4	    position: fixed;
+     5	    top: 0; left: 0; width: 100vw; height: 100vh;
+     6	    background: rgba(30,34,66,0.32);
+     7	    z-index: 10099;
+     8	    display: flex;
+     9	    align-items: center;
+    10	    justify-content: center;
+    11	    transition: background 0.2s;
+    12	}
+    13	
+    14	.modal-invitacion-jugador-contenedor {
+    15	    background: #fff;
+    16	    border-radius: 18px;
+    17	    max-width: 520px;
+    18	    width: 96vw;
+    19	    padding: 38px 26px 26px 26px;
+    20	    box-shadow: 0 6px 40px rgba(22,24,52,0.18);
+    21	    position: relative;
+    22	    margin: 0 auto;
+    23	    animation: modalFadeIn 0.18s;
+    24	}
+    25	
+    26	@keyframes modalFadeIn {
+    27	    from { opacity:0; transform: scale(0.96);}
+    28	    to { opacity:1; transform: scale(1);}
+    29	}
+    30	
+    31	.cerrar-modal-invitacion-jugador {
+    32	    position: absolute;
+    33	    top: 14px; right: 14px;
+    34	    background: none; border: none;
+    35	    font-size: 2rem; color: #233e66;
+    36	    font-weight: 700;
+    37	    cursor: pointer;
+    38	    transition: color 0.18s;
+    39	}
+    40	
+    41	.cerrar-modal-invitacion-jugador:hover {
+    42	    color: #1a2156;
+    43	}
+    44	
+    45	.titulo-modal-invitacion {
+    46	    font-size: 1.7rem;
+    47	    font-weight: 700;
+    48	    margin-bottom: 26px;
+    49	    text-align: center;
+    50	}
+    51	
+    52	.modal-invitacion-seleccion {
+    53	    display: flex;
+    54	    gap: 26px;
+    55	    justify-content: center;
+    56	    margin-bottom: 20px;
+    57	}
+    58	
+    59	.modal-invitacion-bloque {
+    60	    flex: 1;
+    61	    background: #f6f7fb;
+    62	    border-radius: 10px;
+    63	    padding: 22px 12px 18px 12px;
+    64	    text-align: center;
+    65	    box-shadow: 0 1px 8px rgba(80,100,150,0.08);
+    66	    position: relative;
+    67	    display: flex;
+    68	    flex-direction: column;
+    69	    align-items: center;
+    70	}
+    71	
+    72	.modal-invitacion-bloque h3 {
+    73	    margin-bottom: 10px;
+    74	    font-size: 1.2rem;
+    75	    font-weight: 700;
+    76	    color: #1a2156;
+    77	}
+    78	
+    79	.modal-invitacion-cuadro {
+    80	    font-size: 0.98rem;
+    81	    color: #273855;
+    82	    margin-bottom: 16px;
+    83	    padding: 10px;
+    84	    min-height: 65px;
+    85	}
+    86	
+    87	.btn-seleccionar-modal-invitacion {
+    88	    background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+    89	    color: #fff;
+    90	    border: none;
+    91	    font-weight: 600;
+    92	    padding: 11px 22px;
+    93	    border-radius: 9px;
+    94	    box-shadow: 0 2px 9px rgba(60,60,100,0.08);
+    95	    font-size: 1.05rem;
+    96	    margin-top: 12px;
+    97	    cursor: pointer;
+    98	    transition: background 0.16s;
+    99	}
+   100	
+   101	.btn-seleccionar-modal-invitacion:disabled {
+   102	    background: #bfc8d7 !important;
+   103	    color: #fff !important;
+   104	    cursor: not-allowed;
+   105	}
+   106	
+   107	.info-en-construccion {
+   108	    display: block;
+   109	    margin-top: 8px;
+   110	    font-size: 0.93rem;
+   111	    color: #b34242;
+   112	    font-weight: 600;
+   113	    opacity: 0.7;
+   114	}
+   115	
+   116	@media (max-width: 600px) {
+   117	    .modal-invitacion-jugador-contenedor { max-width: 97vw; padding: 20px 6vw 12px 6vw; }
+   118	    .modal-invitacion-seleccion { flex-direction: column; gap: 14px; }
+   119	}
+   120	
+   121	/* --- Formulario de invitaci贸n autom谩tica de jugadores --- */
+   122	.form-invitacion-jugador-automatica {
+   123	    padding: 18px 10px 12px 10px;
+   124	    background: #f7f9fe;
+   125	    border-radius: 11px;
+   126	    box-shadow: 0 1px 8px rgba(80,100,150,0.08);
+   127	    margin-top: 18px;
+   128	    max-width: 410px;
+   129	    margin-left: auto;
+   130	    margin-right: auto;
+   131	}
+   132	
+   133	.form-invitacion-jugador-automatica h3 {
+   134	    font-size: 1.22rem;
+   135	    font-weight: 700;
+   136	    text-align: center;
+   137	    margin-bottom: 16px;
+   138	    color: #1a2156;
+   139	}
+   140	
+   141	.form-invitacion-jugador-automatica .form-group {
+   142	    margin-bottom: 15px;
+   143	}
+   144	
+   145	.form-invitacion-jugador-automatica label {
+   146	    font-size: 1.04rem;
+   147	    font-weight: 500;
+   148	    color: #1a2156;
+   149	    margin-bottom: 3px;
+   150	    display: block;
+   151	}
+   152	
+   153	.form-invitacion-jugador-automatica input,
+   154	.form-invitacion-jugador-automatica textarea {
+   155	    width: 100%;
+   156	    padding: 8px 12px;
+   157	    border: 1px solid #d7e1ef;
+   158	    border-radius: 8px;
+   159	    font-size: 1rem;
+   160	    font-family: inherit;
+   161	    margin-top: 2px;
+   162	    margin-bottom: 2px;
+   163	    box-sizing: border-box;
+   164	    background: #fff;
+   165	}
+   166	
+   167	.form-invitacion-jugador-automatica textarea {
+   168	    resize: vertical;
+   169	    min-height: 54px;
+   170	}
+   171	
+   172	.btn-enviar-invitacion {
+   173	    background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+   174	    color: #fff;
+   175	    border: none;
+   176	    font-weight: 600;
+   177	    padding: 11px 22px;
+   178	    border-radius: 9px;
+   179	    box-shadow: 0 2px 9px rgba(60,60,100,0.10);
+   180	    font-size: 1.06rem;
+   181	    margin-top: 8px;
+   182	    cursor: pointer;
+   183	    transition: background 0.17s;
+   184	    margin-bottom: 6px;
+   185	    width: 100%;
+   186	}
+   187	
+   188	.btn-enviar-invitacion:disabled {
+   189	    background: #bfc8d7 !important;
+   190	    color: #fff !important;
+   191	    cursor: not-allowed;
+   192	}
+   193	
+   194	@media (max-width: 600px) {
+   195	    .form-invitacion-jugador-automatica {
+   196	        padding: 10px 2vw 8px 2vw;
+   197	        max-width: 99vw;
+   198	    }
+   199	}
+   200	
+   201	
+   202	/* Antiguo /assets/css/form-invitacion-jugador-manual.css */
+   203	/* Contenedor principal del formulario manual */
+   204	.form-invitacion-jugador-manual {
+   205	    padding: 18px 16px 10px 16px;
+   206	    background: #f7f9fe;
+   207	    border-radius: 12px;
+   208	    box-shadow: 0 2px 16px rgba(80,100,150,0.10);
+   209	    margin: 0 auto;
+   210	    max-width: 380px;
+   211	    min-width: 250px;
+   212	    font-family: inherit;
+   213	}
+   214	
+   215	.form-invitacion-jugador-manual h3 {
+   216	    font-size: 1.23rem;
+   217	    font-weight: 700;
+   218	    text-align: center;
+   219	    margin-bottom: 16px;
+   220	    color: #1a2156;
+   221	}
+   222	
+   223	.form-invitacion-jugador-manual .form-group {
+   224	    margin-bottom: 16px;
+   225	}
+   226	
+   227	.form-invitacion-jugador-manual label {
+   228	    font-size: 1rem;
+   229	    font-weight: 500;
+   230	    color: #1a2156;
+   231	    margin-bottom: 3px;
+   232	    display: block;
+   233	}
+   234	
+   235	.form-invitacion-jugador-manual input,
+   236	.form-invitacion-jugador-manual textarea {
+   237	    width: 100%;
+   238	    padding: 8px 12px;
+   239	    border: 1px solid #d7e1ef;
+   240	    border-radius: 8px;
+   241	    font-size: 1rem;
+   242	    font-family: inherit;
+   243	    margin-top: 2px;
+   244	    margin-bottom: 2px;
+   245	    box-sizing: border-box;
+   246	    background: #fff;
+   247	}
+   248	
+   249	.form-invitacion-jugador-manual textarea {
+   250	    resize: vertical;
+   251	    min-height: 60px;
+   252	}
+   253	
+   254	.form-invitacion-jugador-manual .btn-guardar-jugador-manual {
+   255	    background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+   256	    color: #fff;
+   257	    border: none;
+   258	    font-weight: 600;
+   259	    padding: 11px 22px;
+   260	    border-radius: 9px;
+   261	    box-shadow: 0 2px 9px rgba(60,60,100,0.08);
+   262	    font-size: 1.06rem;
+   263	    margin-top: 5px;
+   264	    cursor: pointer;
+   265	    transition: background 0.17s;
+   266	}
+   267	
+   268	.form-invitacion-jugador-manual .btn-guardar-jugador-manual:hover {
+   269	    background: #1747d7;
+   270	}
+   271	
+   272	#mensaje-invitacion-jugador-manual {
+   273	    margin-top: 12px;
+   274	    font-size: 1rem;
+   275	    color: #1a2156;
+   276	    text-align: center;
+   277	    min-height: 24px;
+   278	}
+   279	
+   280	@media (max-width: 600px) {
+   281	    .form-invitacion-jugador-manual {
+   282	        padding: 12px 4vw 8px 4vw;
+   283	        max-width: 98vw;
+   284	    }
+   285	}
+   286	
+   287	

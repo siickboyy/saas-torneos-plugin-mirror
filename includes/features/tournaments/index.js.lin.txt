@@ -1,0 +1,161 @@
+     1	/**
+     2	 * includes/features/tournaments/index.js
+     3	 * Guardado "Editar torneo" con cookies + anti-caché + retry si el nonce está caducado.
+     4	 */
+     5	(function () {
+     6	  'use strict';
+     7	
+     8	  // --------- Utilidades ----------
+     9	  const DBG = (...a) => console.log('[TOURNAMENTS]', ...a);
+    10	
+    11	  function getAjaxConfig() {
+    12	    const cfg = window.STR_TOURNAMENTS_AJAX || {};
+    13	    if (!cfg.ajax_url || !cfg.nonce) {
+    14	      DBG('❌ Config AJAX ausente/incompleta', cfg);
+    15	    } else {
+    16	      DBG('✅ Config AJAX', cfg);
+    17	    }
+    18	    return cfg;
+    19	  }
+    20	
+    21	  // Crea (si no existe) un input hidden con el nonce dentro del modal.
+    22	  function ensureNonceInput(defaultNonce) {
+    23	    const modal = document.getElementById('modal-editar-torneo');
+    24	    if (!modal) return null;
+    25	
+    26	    let input = modal.querySelector('#str-nonce');
+    27	    if (!input) {
+    28	      input = document.createElement('input');
+    29	      input.type = 'hidden';
+    30	      input.id = 'str-nonce';
+    31	      input.name = 'str_nonce';
+    32	      modal.appendChild(input);
+    33	    }
+    34	    if (!input.value && defaultNonce) input.value = defaultNonce;
+    35	    return input;
+    36	  }
+    37	
+    38	  // Normaliza HH:mm (admite "H:m")
+    39	  function fixTime(t) {
+    40	    if (!t) return '';
+    41	    const p = (t + '').split(':');
+    42	    if (p.length >= 2) return `${p[0].padStart(2,'0')}:${p[1].padStart(2,'0')}`;
+    43	    return '';
+    44	  }
+    45	
+    46	  // --------- UI ----------
+    47	  function openModal() {
+    48	    const m = document.getElementById('modal-editar-torneo');
+    49	    if (m) m.style.display = 'flex';
+    50	  }
+    51	  function closeModal() {
+    52	    const m = document.getElementById('modal-editar-torneo');
+    53	    if (m) m.style.display = 'none';
+    54	  }
+    55	
+    56	  // --------- AJAX helper ----------
+    57	  async function postAjax(url, fd) {
+    58	    // Anti-caché SW + envío cookies forzado
+    59	    const cacheBuster = (url.includes('?') ? '&' : '?') + `_=${Date.now()}`;
+    60	    const res = await fetch(url + cacheBuster, {
+    61	      method: 'POST',
+    62	      body: fd,
+    63	      credentials: 'include', // <- cookies SIEMPRE
+    64	      cache: 'no-store',
+    65	      headers: {
+    66	        'X-Requested-With': 'XMLHttpRequest',
+    67	        'Cache-Control': 'no-store'
+    68	      }
+    69	    });
+    70	    const raw = await res.text();
+    71	    let data = null;
+    72	    try { data = JSON.parse(raw); } catch (_) {}
+    73	    DBG('← RESP', res.status, raw);
+    74	    return { res, data, raw };
+    75	  }
+    76	
+    77	  async function handleSave(clickBtn) {
+    78	    const cfg = getAjaxConfig();
+    79	    if (!cfg.ajax_url) {
+    80	      alert('No se pudo guardar (config AJAX ausente).');
+    81	      return;
+    82	    }
+    83	
+    84	    // Aseguramos nonce visible en el modal
+    85	    const nonceInput = ensureNonceInput(cfg.nonce);
+    86	
+    87	    // Datos del modal
+    88	    const torneoId    = clickBtn.getAttribute('data-torneo-id') || '';
+    89	    const titulo      = document.querySelector('#modal-editar-torneo input[name="titulo"]')?.value || '';
+    90	    const descripcion = document.querySelector('#modal-editar-torneo textarea[name="descripcion"]')?.value || '';
+    91	    const fecha       = document.querySelector('#modal-editar-torneo input[name="fecha_torneo"]')?.value || '';
+    92	    const hora_inicio = fixTime(document.querySelector('#modal-editar-torneo input[name="hora_inicio"]')?.value || '');
+    93	    const hora_fin    = fixTime(document.querySelector('#modal-editar-torneo input[name="hora_fin"]')?.value || '');
+    94	
+    95	    // Construye payload
+    96	    const buildFD = (nonce) => {
+    97	      const fd = new FormData();
+    98	      fd.append('action',       'str_guardar_torneo_editado');
+    99	      fd.append('nonce',        nonce || '');
+   100	      fd.append('torneo_id',    torneoId);
+   101	      fd.append('titulo',       titulo);
+   102	      fd.append('descripcion',  descripcion);
+   103	      fd.append('fecha_torneo', fecha);
+   104	      fd.append('hora_inicio',  hora_inicio);
+   105	      fd.append('hora_fin',     hora_fin);
+   106	      return fd;
+   107	    };
+   108	
+   109	    let currentNonce = nonceInput?.value || cfg.nonce || '';
+   110	    DBG('→ POST (primer intento)', { torneoId, titulo, fecha, hora_inicio, hora_fin, nonce: currentNonce });
+   111	
+   112	    // 1º intento
+   113	    let { res, data } = await postAjax(cfg.ajax_url, buildFD(currentNonce));
+   114	
+   115	    // ¿Nonce inválido? reintenta UNA vez con el que devuelva el servidor
+   116	    if (res.status === 403 && data && data.success === false && data.data && data.data.code === 'nonce_invalid' && data.data.new_nonce) {
+   117	      currentNonce = data.data.new_nonce;
+   118	      if (nonceInput) nonceInput.value = currentNonce;
+   119	      DBG('↻ Reintentando con nonce fresco…', currentNonce);
+   120	      ({ res, data } = await postAjax(cfg.ajax_url, buildFD(currentNonce)));
+   121	    }
+   122	
+   123	    // Resultado final
+   124	    if (!res.ok) {
+   125	      // Mensajes más claros si vienen de nuestro callback
+   126	      if (data && data.data && data.data.code === 'auth_required') {
+   127	        alert('Tu sesión no está activa. Inicia sesión de nuevo y prueba de nuevo.');
+   128	        return;
+   129	      }
+   130	      if (data && data.data && data.data.message) {
+   131	        alert('No se pudo guardar: ' + data.data.message);
+   132	        return;
+   133	      }
+   134	      alert('No se pudo guardar. Status: ' + res.status);
+   135	      return;
+   136	    }
+   137	
+   138	    if (data && data.success) {
+   139	      alert('Torneo actualizado correctamente.');
+   140	      closeModal();
+   141	      location.reload();
+   142	    } else {
+   143	      const msg = (data && (data.data?.message || data.message)) || 'Error desconocido';
+   144	      alert('No se pudo guardar: ' + msg);
+   145	    }
+   146	  }
+   147	
+   148	  function bindUI() {
+   149	    const btnOpen   = document.getElementById('btn-editar-torneo');
+   150	    const btnSave   = document.getElementById('guardar-torneo');
+   151	    const btnCancel = document.getElementById('cancelar-editar-torneo');
+   152	    const btnX      = document.getElementById('cerrar-modal-editar');
+   153	
+   154	    if (btnOpen)   btnOpen.addEventListener('click', openModal);
+   155	    if (btnCancel) btnCancel.addEventListener('click', closeModal);
+   156	    if (btnX)      btnX.addEventListener('click', closeModal);
+   157	    if (btnSave)   btnSave.addEventListener('click', () => handleSave(btnSave));
+   158	  }
+   159	
+   160	  document.addEventListener('DOMContentLoaded', bindUI);
+   161	})();

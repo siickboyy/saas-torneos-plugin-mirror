@@ -1,0 +1,189 @@
+     1	/* =========================================
+     2	   TORNEO (vista principal)
+     3	   Contenedor, tipografías, botones y tablas
+     4	   ========================================= */
+     5	
+     6	/* ---- Paleta / tokens rápidos ---- */
+     7	:root {
+     8	  --tr-blue: #2f57eb;
+     9	  --tr-blue-600: #2649c7;
+    10	  --tr-bg: #ffffff;
+    11	  --tr-text: #1b2248;
+    12	  --tr-muted: #6b7294;
+    13	  --tr-line: #e9edf6;
+    14	  --tr-card: #ffffff;
+    15	  --tr-card-shadow: 0 8px 24px rgba(22, 28, 45, 0.08);
+    16	}
+    17	
+    18	/* ---- Contenedor principal de la vista ---- */
+    19	#saas-tr-torneo {
+    20	  box-sizing: border-box;
+    21	  width: 100%;
+    22	  /* Alineado al ancho de contenido del tema (Astra): */
+    23	  max-width: 1140px;
+    24	  margin: 0 auto 48px;
+    25	  padding: 24px 24px 32px;
+    26	  background: var(--tr-card);
+    27	  border-radius: 14px;
+    28	  box-shadow: var(--tr-card-shadow);
+    29	  color: var(--tr-text);
+    30	}
+    31	
+    32	/* Título */
+    33	#saas-tr-torneo .saas-tr-titulo {
+    34	  margin: 4px 0 18px;
+    35	  font-size: 2.1rem;
+    36	  line-height: 1.2;
+    37	}
+    38	
+    39	/* Lista meta (deporte, tipo, etc.) */
+    40	#saas-tr-torneo .saas-tr-meta {
+    41	  margin: 0 0 18px;
+    42	  padding-left: 20px;
+    43	}
+    44	#saas-tr-torneo .saas-tr-meta li {
+    45	  margin: 6px 0;
+    46	  color: var(--tr-text);
+    47	}
+    48	
+    49	/* Descripción */
+    50	#saas-tr-torneo .saas-tr-descripcion {
+    51	  margin: 14px 0 10px;
+    52	  color: var(--tr-muted);
+    53	}
+    54	
+    55	/* ---- Botones reutilizables ---- */
+    56	#saas-tr-torneo .saas-tr-btn {
+    57	  appearance: none;
+    58	  display: inline-flex;
+    59	  align-items: center;
+    60	  justify-content: center;
+    61	  gap: .4rem;
+    62	  padding: 10px 16px;
+    63	  border-radius: 10px;
+    64	  border: 1px solid transparent;
+    65	  background: #f3f6ff;
+    66	  color: var(--tr-blue);
+    67	  font-weight: 600;
+    68	  cursor: pointer;
+    69	  transition: transform .04s ease, background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+    70	}
+    71	#saas-tr-torneo .saas-tr-btn:hover {
+    72	  background: #e9efff;
+    73	}
+    74	#saas-tr-torneo .saas-tr-btn:active {
+    75	  transform: translateY(1px);
+    76	}
+    77	
+    78	/* Variantes */
+    79	#saas-tr-torneo .saas-tr-btn--primary {
+    80	  background: var(--tr-blue);
+    81	  color: #fff;
+    82	  box-shadow: 0 4px 14px rgba(47, 87, 235, .26);
+    83	}
+    84	#saas-tr-torneo .saas-tr-btn--primary:hover { background: var(--tr-blue-600); }
+    85	#saas-tr-torneo .saas-tr-btn--light {
+    86	  background: #fff;
+    87	  border-color: var(--tr-line);
+    88	  color: var(--tr-blue);
+    89	}
+    90	#saas-tr-torneo .saas-tr-btn--light:hover {
+    91	  background: #f8faff;
+    92	  border-color: #dfe6fb;
+    93	}
+    94	
+    95	/* Bloque de acciones (parejas: +añadir…) */
+    96	#saas-tr-torneo .saas-tr-acciones {
+    97	  display: flex;
+    98	  gap: 10px;
+    99	  margin: 10px 0 14px;
+   100	}
+   101	
+   102	/* ---- “Cards” de secciones ---- */
+   103	#saas-tr-torneo .saas-tr-bloque {
+   104	  margin: 22px 0 28px;
+   105	  padding: 18px 16px 6px;
+   106	  border: 1px solid var(--tr-line);
+   107	  border-radius: 12px;
+   108	  background: #fff;
+   109	  box-shadow: 0 2px 10px rgba(22, 28, 45, 0.03);
+   110	}
+   111	#saas-tr-torneo .saas-tr-bloque > h2 {
+   112	  margin: 0 0 12px;
+   113	  font-size: 1.5rem;
+   114	}
+   115	
+   116	/* Sub-secciones dentro de “Gestión de grupos” */
+   117	#saas-tr-torneo .saas-tr-seccion {
+   118	  margin: 16px 0 20px;
+   119	  padding: 14px 12px;
+   120	  border: 2px dashed var(--tr-line);
+   121	  border-radius: 12px;
+   122	  background: #fbfcff;
+   123	}
+   124	#saas-tr-torneo .saas-tr-seccion > h3 {
+   125	  margin: 0 0 10px;
+   126	}
+   127	
+   128	/* ---- Tablas (parejas y listas varias) ---- */
+   129	#saas-tr-torneo .saas-tr-tabla {
+   130	  width: 100%;
+   131	  border-collapse: separate;
+   132	  border-spacing: 0;
+   133	  background: #fff;
+   134	  border-radius: 12px;
+   135	  overflow: hidden;
+   136	  box-shadow: 0 3px 16px rgba(40,60,160,0.08);
+   137	  font-family: inherit;
+   138	}
+   139	
+   140	#saas-tr-torneo .saas-tr-tabla thead tr {
+   141	  background: #e8f0fe;
+   142	}
+   143	
+   144	#saas-tr-torneo .saas-tr-tabla th,
+   145	#saas-tr-torneo .saas-tr-tabla td {
+   146	  padding: 12px 16px;
+   147	  text-align: left;
+   148	}
+   149	
+   150	#saas-tr-torneo .saas-tr-tabla th {
+   151	  color: #1b2248;
+   152	  font-weight: 700;
+   153	  font-size: 1.02rem;
+   154	  letter-spacing: 0.01em;
+   155	  border-bottom: 2px solid #dde5f6;
+   156	}
+   157	
+   158	#saas-tr-torneo .saas-tr-tabla tbody tr:nth-child(odd) { background: #f7fafd; }
+   159	#saas-tr-torneo .saas-tr-tabla tbody tr:nth-child(even) { background: #f3f6fb; }
+   160	#saas-tr-torneo .saas-tr-tabla tbody td {
+   161	  color: #293054;
+   162	  font-size: .98rem;
+   163	  border-bottom: 1px solid #edf2fb;
+   164	}
+   165	#saas-tr-torneo .saas-tr-tabla tbody tr:last-child td { border-bottom: none; }
+   166	#saas-tr-torneo .saas-tr-tabla tbody tr:hover { background: #e1ecfc; transition: background .12s; }
+   167	
+   168	/* ---- Ajustes finos / utilidades ---- */
+   169	#saas-tr-torneo .saas-tr-hint {
+   170	  color: var(--tr-muted);
+   171	}
+   172	
+   173	/* Responsive */
+   174	@media (max-width: 920px) {
+   175	  #saas-tr-torneo { padding: 18px 14px 24px; }
+   176	  #saas-tr-torneo .saas-tr-bloque { padding: 14px 12px 2px; }
+   177	  #saas-tr-torneo .saas-tr-acciones { flex-wrap: wrap; }
+   178	  #saas-tr-torneo .saas-tr-tabla th, 
+   179	  #saas-tr-torneo .saas-tr-tabla td { padding: 10px 12px; }
+   180	}
+   181	/* ===== Ajuste de espaciado del bloque Parejas vs. Gestión de grupos ===== */
+   182	.saas-tr-bloque--parejas {
+   183	  margin-bottom: 20px; /* corto para no meter aire antes del siguiente bloque */
+   184	}
+   185	
+   186	/* La tabla no añade margen extra por debajo */
+   187	#tabla-parejas {
+   188	  margin-bottom: 0;
+   189	}

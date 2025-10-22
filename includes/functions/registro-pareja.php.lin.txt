@@ -1,0 +1,155 @@
+     1	<?php
+     2	/**
+     3	 * Procesa el registro de una pareja (dos jugadores) en una competición.
+     4	 * Ruta: /includes/functions/registro-pareja.php
+     5	 */
+     6	
+     7	// Hooks para AJAX de WordPress (logueado y visitante)
+     8	add_action('wp_ajax_str_registrar_pareja', 'str_registrar_pareja');
+     9	add_action('wp_ajax_nopriv_str_registrar_pareja', 'str_registrar_pareja');
+    10	
+    11	function str_registrar_pareja() {
+    12	    // --- LOG: Registra el payload recibido en el debug.log para depuración ---
+    13	    error_log('Payload recibido en str_registrar_pareja: ' . print_r($_POST, true));
+    14	
+    15	    // --- Recoger y sanitizar los datos del formulario ---
+    16	    // Si se ha seleccionado un jugador existente, recibimos el ID, si es nuevo recibimos los datos completos
+    17	    $jugador1_id = isset($_POST['jugador_1_id']) && is_numeric($_POST['jugador_1_id']) ? intval($_POST['jugador_1_id']) : null;
+    18	    $jugador2_id = isset($_POST['jugador_2_id']) && is_numeric($_POST['jugador_2_id']) ? intval($_POST['jugador_2_id']) : null;
+    19	
+    20	    $nombre_1    = sanitize_text_field($_POST['nombre_jugador_1'] ?? '');
+    21	    $apellido_1  = sanitize_text_field($_POST['apellidos_jugador_1'] ?? '');
+    22	    $email_1     = sanitize_email($_POST['email_jugador_1'] ?? '');
+    23	    $telefono_1  = sanitize_text_field($_POST['telefono_jugador_1'] ?? '');
+    24	    $nombre_2    = sanitize_text_field($_POST['nombre_jugador_2'] ?? '');
+    25	    $apellido_2  = sanitize_text_field($_POST['apellidos_jugador_2'] ?? '');
+    26	    $email_2     = sanitize_email($_POST['email_jugador_2'] ?? '');
+    27	    $telefono_2  = sanitize_text_field($_POST['telefono_jugador_2'] ?? '');
+    28	    $deporte     = sanitize_text_field($_POST['deporte'] ?? '');
+    29	    $torneo_id   = absint($_POST['torneo_id'] ?? 0);
+    30	
+    31	    // --- Validación básica de campos obligatorios ---
+    32	    if (!$deporte || !$torneo_id) {
+    33	        wp_send_json_error(['mensaje' => 'Faltan datos obligatorios.']);
+    34	    }
+    35	
+    36	    // --- Validación: emails de los dos jugadores no pueden coincidir ---
+    37	    if ($email_1 && $email_2 && $email_1 === $email_2) {
+    38	        wp_send_json_error(['mensaje' => 'Los dos jugadores deben tener emails distintos.']);
+    39	    }
+    40	
+    41	    // --- Lógica para obtener/crear los posts de jugador ---
+    42	    // Auxiliar para buscar/crear un jugador solo si no existe
+    43	    function str_get_or_create_jugador($nombre, $apellido, $email, $telefono, $deporte) {
+    44	        // Busca jugador por email (clave única)
+    45	        $args = [
+    46	            'post_type' => 'jugador_deportes',
+    47	            'meta_query' => [[
+    48	                'key' => 'email',
+    49	                'value' => $email,
+    50	                'compare' => '=',
+    51	            ]],
+    52	            'posts_per_page' => 1,
+    53	            'fields' => 'ids',
+    54	        ];
+    55	        $q = get_posts($args);
+    56	        if ($q && count($q) > 0) {
+    57	            // Jugador existente: no se actualiza, solo se recupera el ID
+    58	            return $q[0];
+    59	        } else {
+    60	            // Crear jugador nuevo si no existe ese email
+    61	            $jugador_id = wp_insert_post([
+    62	                'post_type' => 'jugador_deportes',
+    63	                'post_title' => $nombre . ' ' . $apellido,
+    64	                'post_status' => 'publish',
+    65	            ]);
+    66	            if ($jugador_id && !is_wp_error($jugador_id)) {
+    67	                update_field('nombre', $nombre, $jugador_id);
+    68	                update_field('apellido', $apellido, $jugador_id);
+    69	                update_field('email', $email, $jugador_id);
+    70	                update_field('telefono', $telefono, $jugador_id);
+    71	                update_field('deporte', $deporte, $jugador_id);
+    72	                return $jugador_id;
+    73	            }
+    74	        }
+    75	        return false;
+    76	    }
+    77	
+    78	    // --- Comprobación/creación de los dos jugadores ---
+    79	    // Si se seleccionó un jugador existente (ID numérico), se usa ese ID.
+    80	    // Si no, se crea uno nuevo con los datos rellenados
+    81	    if (!$jugador1_id) {
+    82	        // No se seleccionó existente, crear nuevo
+    83	        if (!$nombre_1 || !$apellido_1 || !$email_1) {
+    84	            wp_send_json_error(['mensaje' => 'Faltan datos del Jugador 1.']);
+    85	        }
+    86	        $jugador1_id = str_get_or_create_jugador($nombre_1, $apellido_1, $email_1, $telefono_1, $deporte);
+    87	    }
+    88	    if (!$jugador2_id) {
+    89	        if (!$nombre_2 || !$apellido_2 || !$email_2) {
+    90	            wp_send_json_error(['mensaje' => 'Faltan datos del Jugador 2.']);
+    91	        }
+    92	        $jugador2_id = str_get_or_create_jugador($nombre_2, $apellido_2, $email_2, $telefono_2, $deporte);
+    93	    }
+    94	
+    95	    if (!$jugador1_id || !$jugador2_id) {
+    96	        wp_send_json_error(['mensaje' => 'No se pudo crear o encontrar a los jugadores.']);
+    97	    }
+    98	    if ($jugador1_id === $jugador2_id) {
+    99	        wp_send_json_error(['mensaje' => 'Debes elegir dos jugadores distintos.']);
+   100	    }
+   101	
+   102	    // --- Comprobar si ya existe la pareja para ese torneo (en cualquier orden) ---
+   103	    // Esto previene duplicados. Busca una pareja donde:
+   104	    // - Ambos jugadores coincidan (jugador1/jugador2 o jugador2/jugador1)
+   105	    // - El torneo asociado sea el actual
+   106	    $pareja_args = [
+   107	        'post_type' => 'pareja',
+   108	        'posts_per_page' => 1,
+   109	        'meta_query' => [
+   110	            'relation' => 'AND',
+   111	            [ // Coincidencia de los dos jugadores, sin importar el orden
+   112	                'relation' => 'OR',
+   113	                [ // Jugador1 en jugador_1 Y jugador2 en jugador_2
+   114	                    'relation' => 'AND',
+   115	                    [ 'key' => 'jugador_1', 'value' => $jugador1_id, 'compare' => '=' ],
+   116	                    [ 'key' => 'jugador_2', 'value' => $jugador2_id, 'compare' => '=' ],
+   117	                ],
+   118	                [ // Jugador2 en jugador_1 Y jugador1 en jugador_2 (pareja invertida)
+   119	                    'relation' => 'AND',
+   120	                    [ 'key' => 'jugador_1', 'value' => $jugador2_id, 'compare' => '=' ],
+   121	                    [ 'key' => 'jugador_2', 'value' => $jugador1_id, 'compare' => '=' ],
+   122	                ],
+   123	            ],
+   124	            [ // El mismo torneo asociado (comparación exacta, ID puro)
+   125	                'key' => 'torneo_asociado',
+   126	                'value' => $torneo_id,
+   127	                'compare' => '='
+   128	            ],
+   129	        ],
+   130	        'fields' => 'ids',
+   131	    ];
+   132	    $parejas = get_posts($pareja_args);
+   133	    if ($parejas && count($parejas) > 0) {
+   134	        // Ya existe una pareja igual para este torneo, devolvemos error
+   135	        wp_send_json_error(['mensaje' => 'Ya existe una pareja con estos jugadores en este torneo.']);
+   136	    }
+   137	
+   138	    // --- Crear la pareja si todo es correcto ---
+   139	    $titulo_pareja = get_the_title($jugador1_id) . ' + ' . get_the_title($jugador2_id);
+   140	    $pareja_id = wp_insert_post([
+   141	        'post_type' => 'pareja',
+   142	        'post_title' => $titulo_pareja,
+   143	        'post_status' => 'publish',
+   144	    ]);
+   145	    if ($pareja_id && !is_wp_error($pareja_id)) {
+   146	        // Asociamos campos ACF
+   147	        update_field('jugador_1', $jugador1_id, $pareja_id);
+   148	        update_field('jugador_2', $jugador2_id, $pareja_id);
+   149	        update_field('deporte', $deporte, $pareja_id);
+   150	        update_field('torneo_asociado', $torneo_id, $pareja_id);
+   151	        wp_send_json_success(['mensaje' => 'Pareja registrada correctamente.']);
+   152	    } else {
+   153	        wp_send_json_error(['mensaje' => 'No se pudo crear la pareja.']);
+   154	    }
+   155	}

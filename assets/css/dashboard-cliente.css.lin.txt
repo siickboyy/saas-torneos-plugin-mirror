@@ -1,0 +1,301 @@
+     1	/* === dashboard-cliente.css COMPLETO === */
+     2	/* ===============================
+     3	   TABLA COMPETICIONES PROFESIONAL
+     4	   =============================== */
+     5	
+     6	.str-tabla-header-controls {
+     7	  display: flex;
+     8	  justify-content: flex-start;
+     9	  align-items: center;
+    10	  margin-bottom: 0.3rem;
+    11	  width: 100%;
+    12	}
+    13	
+    14	.str-table-search-wrapper {
+    15	  position: relative;
+    16	  display: inline-block;
+    17	  width: 100%;
+    18	  max-width: 430px;
+    19	  margin-bottom: 1rem;
+    20	}
+    21	
+    22	.str-table-search {
+    23	  width: 100%;
+    24	  padding: 0.65rem 1.1rem 0.65rem 2.8rem;
+    25	  border: 1px solid #d0e2ff;
+    26	  border-radius: 9px;
+    27	  font-size: 1rem;
+    28	  outline: none;
+    29	  box-shadow: 0 1px 3px rgba(0,85,204,0.04);
+    30	  margin-bottom: 0;
+    31	  transition: border 0.15s;
+    32	  z-index: 1;
+    33	}
+    34	.str-table-search:focus {
+    35	  border-color: #0055cc;
+    36	}
+    37	@media (max-width: 800px) {
+    38	  .str-table-search {
+    39	    font-size: 0.96rem;
+    40	    padding: 0.5rem 0.6rem 0.5rem 2.4rem;
+    41	  }
+    42	}
+    43	
+    44	
+    45	/* Tabla */
+    46	.str-tabla-wrapper {
+    47	  width: 100%;
+    48	  overflow-x: auto;
+    49	  margin-top: 1.2rem;
+    50	}
+    51	.str-tabla {
+    52	  width: 100%;
+    53	  border-collapse: separate;
+    54	  border-spacing: 0;
+    55	  font-size: 1.01rem;
+    56	  min-width: 620px;
+    57	  background: #fff;
+    58	  border-radius: 16px;
+    59	  box-shadow: 0 3px 16px rgba(60,70,100,0.08);
+    60	  overflow: hidden;
+    61	}
+    62	.str-tabla th,
+    63	.str-tabla td {
+    64	  padding: 0.95rem 1.2rem;
+    65	  text-align: left;
+    66	  border-bottom: 1px solid #e6eaf1;
+    67	  font-weight: 600;
+    68	  background: none;
+    69	}
+    70	.str-tabla th {
+    71	  background: #f2f2f2;
+    72	  font-size: 1.07rem;
+    73	  position: sticky;
+    74	  top: 0;
+    75	  z-index: 1;
+    76	  user-select: none;
+    77	  cursor: pointer;
+    78	  font-weight: 700;
+    79	  vertical-align: middle;
+    80	}
+    81	.str-tabla th .str-table-sort-icon {
+    82	  margin-left: 0.4em;
+    83	  font-size: 1em;
+    84	  color: #0055cc;
+    85	  display: inline-block;
+    86	  vertical-align: middle;
+    87	}
+    88	.str-tabla th:last-child, .str-tabla td:last-child { text-align: center; }
+    89	.str-tabla tbody tr {
+    90	  transition: background 0.17s;
+    91	}
+    92	.str-tabla tbody tr:hover {
+    93	  background-color: #eaf3ff;
+    94	}
+    95	.str-tabla tbody tr:nth-child(even) {
+    96	  background-color: #f8fbfe;
+    97	}
+    98	.str-tabla-intro {
+    99	  color: #3d455c;
+   100	  font-size: 1.08rem;
+   101	  margin-bottom: 1.1em;
+   102	  margin-top: 0.4em;
+   103	  opacity: 0.87;
+   104	}
+   105	
+   106	/* Botón "Ver competición" */
+   107	.str-dashboard-btn,
+   108	.str-dashboard-btn.str-btn-ver {
+   109	  background: #0055cc;
+   110	  color: #fff !important;
+   111	  border-radius: 7px;
+   112	  padding: 0.45rem 1.05rem;
+   113	  font-size: 1rem;
+   114	  font-weight: 600;
+   115	  border: none;
+   116	  box-shadow: 0 2px 7px rgba(0,85,204,0.07);
+   117	  transition: background 0.18s, transform 0.18s;
+   118	  cursor: pointer;
+   119	  text-decoration: none !important;
+   120	  display: inline-block;
+   121	}
+   122	.str-dashboard-btn:hover,
+   123	.str-dashboard-btn.str-btn-ver:hover {
+   124	  background: #003f99;
+   125	  color: #fff !important;
+   126	  transform: translateY(-2px) scale(1.04);
+   127	  text-decoration: none !important;
+   128	}
+   129	
+   130	/* Responsive para la tabla */
+   131	@media (max-width: 800px) {
+   132	  .str-tabla-wrapper {
+   133	    overflow-x: auto;
+   134	  }
+   135	  .str-tabla {
+   136	    min-width: 520px;
+   137	    font-size: 0.97rem;
+   138	  }
+   139	  .str-tabla th, .str-tabla td {
+   140	    padding: 0.7rem 0.5rem;
+   141	  }
+   142	  .str-table-search {
+   143	    font-size: 0.96rem;
+   144	    padding: 0.5rem 0.6rem 0.5rem 2.1rem;
+   145	  }
+   146	  .str-table-search-wrapper {
+   147	    max-width: 100%;
+   148	  }
+   149	}
+   150	
+   151	
+   152	/* Botones del panel */
+   153	.str-dashboard-btn {
+   154	  background-color: #0055cc;
+   155	  color: #fff;
+   156	  padding: 0.5rem 1rem;
+   157	  border: none;
+   158	  border-radius: 6px;
+   159	  font-size: 0.95rem;
+   160	  cursor: pointer;
+   161	  transition: background 0.2s ease-in-out;
+   162	}
+   163	
+   164	.str-dashboard-btn:hover {
+   165	  background-color: #003f99;
+   166	}
+   167	
+   168	/* Filtros o secciones generales */
+   169	.str-dashboard-seccion {
+   170	  margin-bottom: 2rem;
+   171	}
+   172	
+   173	@media (max-width: 768px) {
+   174	  .str-tabla-competicion {
+   175	    font-size: 0.9rem;
+   176	  }
+   177	}
+   178	
+   179	/* ==== DASHBOARD CARDS HOME ==== */
+   180	.str-dashboard-cards {
+   181	  display: grid;
+   182	  grid-template-columns: repeat(4, 1fr);
+   183	  gap: 2rem;
+   184	  margin-top: 2.5rem;
+   185	}
+   186	
+   187	.str-dashboard-card,
+   188	.str-dashboard-card *,
+   189	.str-dashboard-card h3,
+   190	.str-dashboard-card p {
+   191	  text-decoration: none !important;
+   192	}
+   193	
+   194	.str-dashboard-card {
+   195	  background: #f5f8ff;
+   196	  box-shadow: 0 6px 24px rgba(32, 96, 168, 0.07);
+   197	  border-radius: 22px;
+   198	  padding: 2.2rem 1.3rem 1.8rem 1.3rem;
+   199	  text-align: center;
+   200	  color: #232b36;
+   201	  transition: box-shadow 0.2s, transform 0.2s;
+   202	  position: relative;
+   203	  cursor: pointer;
+   204	  border: 1px solid #e3eeff;
+   205	}
+   206	
+   207	.str-dashboard-card:hover, .str-dashboard-card:focus {
+   208	  box-shadow: 0 10px 32px rgba(32, 96, 168, 0.15);
+   209	  transform: translateY(-5px) scale(1.035);
+   210	  border-color: #b2d3ff;
+   211	}
+   212	
+   213	.str-dashboard-card-icon {
+   214	  margin-bottom: 1.3rem;
+   215	}
+   216	.str-dashboard-card-icon svg {
+   217	  display: block;
+   218	  margin: 0 auto;
+   219	}
+   220	
+   221	.str-dashboard-card h3 {
+   222	  margin: 0 0 0.6rem 0;
+   223	  font-size: 1.18rem;
+   224	  font-weight: 700;
+   225	  color: #0055cc;
+   226	  letter-spacing: 0.01em;
+   227	}
+   228	
+   229	.str-dashboard-card p {
+   230	  margin: 0;
+   231	  font-size: 1rem;
+   232	  color: #49546b;
+   233	  opacity: 0.90;
+   234	  font-weight: 400;
+   235	  line-height: 1.35;
+   236	}
+   237	.str-dashboard-card-icon {
+   238	  margin-bottom: 1.3rem;
+   239	  display: flex;
+   240	  justify-content: center;
+   241	  align-items: center;
+   242	}
+   243	
+   244	.str-dashboard-card-icon i {
+   245	  font-size: 2.4rem;
+   246	  color: #0055cc;
+   247	  background: #eaf3ff;
+   248	  border-radius: 50%;
+   249	  padding: 0.7rem;
+   250	  width: 3.2rem;
+   251	  height: 3.2rem;
+   252	  display: flex;
+   253	  justify-content: center;
+   254	  align-items: center;
+   255	}
+   256	
+   257	/* ==== DASHBOARD CARDS HOME Versión movil ==== */
+   258	@media (max-width: 900px) {
+   259	  .str-dashboard-cards {
+   260	    display: grid;
+   261	    grid-template-columns: 1fr 1fr;
+   262	    gap: 1.2rem;
+   263	    margin-top: 1.2rem;
+   264	    justify-items: center;
+   265	    width: 100%;
+   266	    max-width: 100%;
+   267	  }
+   268	  .str-dashboard-card {
+   269	    width: 100%;
+   270	    max-width: 210px;
+   271	    min-width: 0;
+   272	    padding: 1.4rem 0.5rem 1.4rem 0.5rem;
+   273	    font-size: 1.06rem;
+   274	    box-sizing: border-box;
+   275	  }
+   276	  .str-dashboard-card-icon i {
+   277	    font-size: 2rem;
+   278	    width: 2.5rem;
+   279	    height: 2.5rem;
+   280	    padding: 0.6rem;
+   281	  }
+   282	}
+   283	
+   284	@media (max-width: 600px) {
+   285	  .str-dashboard-cards {
+   286	    gap: 0.8rem;
+   287	    margin-top: 1rem;
+   288	  }
+   289	  .str-dashboard-card {
+   290	    max-width: 170px;
+   291	    padding: 1.25rem 0.2rem 1.1rem 0.2rem;
+   292	    font-size: 1rem;
+   293	  }
+   294	  .str-dashboard-card-icon i {
+   295	    font-size: 1.4rem;
+   296	    width: 2rem;
+   297	    height: 2rem;
+   298	    padding: 0.32rem;
+   299	  }
+   300	}
+   301	

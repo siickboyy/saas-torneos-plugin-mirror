@@ -1,0 +1,87 @@
+     1	<?php
+     2	// AJAX: Asignar una pareja a un grupo
+     3	// Acción: saas_grupo_asignar_pareja
+     4	
+     5	if (!defined('ABSPATH')) { exit; }
+     6	
+     7	add_action('wp_ajax_saas_grupo_asignar_pareja', 'saas_grupo_asignar_pareja');
+     8	
+     9	function saas_grupo_asignar_pareja() {
+    10	    $t0 = microtime(true);
+    11	    $req_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('grp_asignar_', true);
+    12	
+    13	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    14	    @ob_start();
+    15	
+    16	    if (function_exists('str_escribir_log')) {
+    17	        str_escribir_log('[START] POST='.print_r($_POST, true).' | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    18	    }
+    19	
+    20	    // Seguridad
+    21	    $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : (isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce']) : '');
+    22	    if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    23	        str_escribir_log('[DENY] Nonce inválido | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    24	        return str_groups_json_error(['message' => 'Nonce inválido.']);
+    25	    }
+    26	    if (!is_user_logged_in() || (!current_user_can('administrator') && !current_user_can('cliente'))) {
+    27	        str_escribir_log('[DENY] Permisos insuficientes | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    28	        return str_groups_json_error(['message' => 'Permisos insuficientes.']);
+    29	    }
+    30	
+    31	    $comp_id  = isset($_POST['competicion_id']) ? intval($_POST['competicion_id']) : 0;
+    32	    $grupo_id = isset($_POST['grupo_id']) ? intval($_POST['grupo_id']) : 0;
+    33	    $pareja_id = isset($_POST['pareja_id']) ? intval($_POST['pareja_id']) : 0;
+    34	
+    35	    if (!$comp_id || !$grupo_id || !$pareja_id) {
+    36	        str_escribir_log('[ERROR] Datos incompletos | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    37	        return str_groups_json_error(['message' => 'Datos incompletos.']);
+    38	    }
+    39	
+    40	    // Validar que el grupo pertenece a la competición
+    41	    $torneo_g = function_exists('get_field') ? get_field('torneo_asociado', $grupo_id) : 0;
+    42	    $ok_comp  = false;
+    43	    if (is_array($torneo_g)) {
+    44	        foreach ($torneo_g as $item) {
+    45	            $ok_comp = $ok_comp || ( (is_object($item) && isset($item->ID) ? intval($item->ID) : intval($item)) === $comp_id );
+    46	        }
+    47	    } else {
+    48	        $ok_comp = (intval($torneo_g) === $comp_id);
+    49	    }
+    50	    if (!$ok_comp) {
+    51	        str_escribir_log('[DENY] Grupo no pertenece a comp='.$comp_id.' | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    52	        return str_groups_json_error(['message' => 'Grupo no pertenece a la competición.']);
+    53	    }
+    54	
+    55	    // Obtener participantes actuales
+    56	    $miembros = function_exists('get_field') ? get_field('participantes_grupo', $grupo_id) : [];
+    57	    $ids = [];
+    58	    if (is_array($miembros)) {
+    59	        foreach ($miembros as $item) { $ids[] = is_object($item) && isset($item->ID) ? intval($item->ID) : intval($item); }
+    60	    } elseif (is_numeric($miembros)) {
+    61	        $ids[] = intval($miembros);
+    62	    }
+    63	
+    64	    // Evitar duplicados
+    65	    if (in_array($pareja_id, $ids, true)) {
+    66	        str_escribir_log('[END] Ya estaba asignada | pareja='.$pareja_id.' grupo='.$grupo_id.' | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    67	        return str_groups_json_ok(['message' => 'Pareja ya estaba en el grupo.']);
+    68	    }
+    69	
+    70	    $ids[] = $pareja_id;
+    71	    if (function_exists('update_field')) {
+    72	        update_field('participantes_grupo', $ids, $grupo_id);
+    73	    } else {
+    74	        update_post_meta($grupo_id, 'participantes_grupo', $ids);
+    75	    }
+    76	
+    77	    str_escribir_log('[END] OK pareja='.$pareja_id.' grupo='.$grupo_id.' dur_ms='.round((microtime(true)-$t0)*1000).' | req_id='.$req_id, 'GROUPS:ASIGNAR');
+    78	    return str_groups_json_ok(['message' => 'Asignado']);
+    79	}
+    80	
+    81	// Helpers JSON (si no están ya cargados por otro archivo)
+    82	if (!function_exists('str_groups_json_ok')) {
+    83	    function str_groups_json_ok(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_success($data); }
+    84	}
+    85	if (!function_exists('str_groups_json_error')) {
+    86	    function str_groups_json_error(array $data){ if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); } wp_send_json_error($data); }
+    87	}

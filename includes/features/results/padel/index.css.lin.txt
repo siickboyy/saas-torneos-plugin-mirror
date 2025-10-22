@@ -1,0 +1,134 @@
+     1	/* Antiguo assets/css/form-resultado-partido.css */
+     2	
+     3	/* Wrapper principal */
+     4	.str-partido-tabla-wrap {
+     5	    max-width: 470px;
+     6	    margin: 32px auto 24px auto;
+     7	    padding: 16px 18px 24px 18px;
+     8	    background: #fff;
+     9	    border-radius: 18px;
+    10	    box-shadow: 0 6px 32px rgba(36,58,94,0.07);
+    11	    border: 1px solid #ececec;
+    12	}
+    13	
+    14	.str-partido-resultado {
+    15	    width: 100%;
+    16	    border-collapse: collapse;
+    17	    margin-bottom: 14px;
+    18	    font-size: 1.08em;
+    19	    background: #fafbfc;
+    20	    border-radius: 12px;
+    21	    overflow: hidden;
+    22	}
+    23	
+    24	.str-partido-resultado th, .str-partido-resultado td {
+    25	    padding: 10px 13px;
+    26	    text-align: center;
+    27	    border-bottom: 1px solid #eaeaea;
+    28	}
+    29	
+    30	.str-partido-resultado th:first-child,
+    31	.str-partido-resultado td:first-child {
+    32	    text-align: left;
+    33	    background: #f4f6f9;
+    34	    font-weight: 600;
+    35	    color: #36405a;
+    36	    border-right: 1px solid #ececec;
+    37	}
+    38	
+    39	.str-partido-resultado th {
+    40	    background: #e7eefb;
+    41	    color: #36405a;
+    42	    font-weight: 500;
+    43	}
+    44	
+    45	.str-partido-resultado tr:last-child td {
+    46	    border-bottom: none;
+    47	}
+    48	
+    49	.str-set-input {
+    50	    width: 45px;
+    51	    padding: 6px 0 6px 0;
+    52	    font-size: 1.1em;
+    53	    text-align: center;
+    54	    border: 1px solid #bfc7d5;
+    55	    border-radius: 7px;
+    56	    background: #f7fafd;
+    57	    transition: border-color 0.2s;
+    58	}
+    59	
+    60	.str-set-input:focus {
+    61	    outline: none;
+    62	    border-color: #4d87ee;
+    63	    background: #f0f7ff;
+    64	}
+    65	
+    66	/* Estado ganador */
+    67	.str-ganador {
+    68	    color: #32b23c;
+    69	    font-weight: 700;
+    70	}
+    71	
+    72	/* Badge de resultado */
+    73	.str-badge-confirmado {
+    74	    background: #e6fff3;
+    75	    color: #24b376;
+    76	    font-weight: 600;
+    77	    padding: 6px 18px;
+    78	    border-radius: 18px;
+    79	    margin-top: 12px;
+    80	    display: inline-block;
+    81	    font-size: 1.05em;
+    82	}
+    83	
+    84	.str-msg-pendiente-validacion {
+    85	    color: #e2ad13;
+    86	    background: #fffbe7;
+    87	    padding: 7px 16px;
+    88	    border-radius: 16px;
+    89	    font-weight: 500;
+    90	    margin-top: 10px;
+    91	    font-size: 1em;
+    92	}
+    93	
+    94	.str-error {
+    95	    color: #c24b4b;
+    96	    background: #fff0f0;
+    97	    padding: 8px 20px;
+    98	    border-radius: 14px;
+    99	    font-weight: 500;
+   100	    margin-top: 14px;
+   101	}
+   102	
+   103	.str-btn-confirmar-resultado {
+   104	    background: #2563eb;
+   105	    color: #fff;
+   106	    border: none;
+   107	    padding: 10px 32px;
+   108	    border-radius: 18px;
+   109	    font-weight: 600;
+   110	    font-size: 1.06em;
+   111	    cursor: pointer;
+   112	    margin-top: 14px;
+   113	    box-shadow: 0 3px 12px rgba(36,58,94,0.08);
+   114	    transition: background 0.2s, box-shadow 0.2s;
+   115	}
+   116	.str-btn-confirmar-resultado:hover {
+   117	    background: #1744a5;
+   118	    box-shadow: 0 6px 24px rgba(36,58,94,0.12);
+   119	}
+   120	
+   121	@media (max-width: 600px) {
+   122	    .str-partido-tabla-wrap {
+   123	        max-width: 98vw;
+   124	        padding: 6vw 1vw 24px 1vw;
+   125	    }
+   126	    .str-partido-resultado th, .str-partido-resultado td {
+   127	        padding: 7px 5px;
+   128	        font-size: 0.97em;
+   129	    }
+   130	    .str-btn-confirmar-resultado {
+   131	        width: 100%;
+   132	        margin-top: 18px;
+   133	    }
+   134	}

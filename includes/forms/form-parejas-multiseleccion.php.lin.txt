@@ -1,0 +1,45 @@
+     1	<?php
+     2	// Este archivo debe cargarse con require/include en la plantilla de torneo
+     3	// SOLO debe incluir el contenido INTERNO del modal (sin el div principal ni display:none)
+     4	?>
+     5	<!-- Bloque de gestión de parejas (contenido interno del modal) -->
+     6	
+     7	<h2>Crear parejas para la competición</h2>
+     8	<!-- El botón de cerrar ya está en torneo.php, no hace falta repetirlo -->
+     9	
+    10	<!-- Búsqueda de jugadores -->
+    11	<div class="bloque-busqueda-jugadores">
+    12	    <h3>Buscar jugadores disponibles</h3>
+    13	    <form id="form-buscar-jugadores">
+    14	        <input type="text" id="busqueda-nombre" name="busqueda_nombre" placeholder="Nombre">
+    15	        <input type="text" id="busqueda-apellido" name="busqueda_apellido" placeholder="Apellido">
+    16	        <input type="text" id="busqueda-email" name="busqueda_email" placeholder="Email">
+    17	        <button type="submit" id="btn-buscar-jugadores">Buscar</button>
+    18	    </form>
+    19	
+    20	    <!-- Resultados (AJAX) -->
+    21	    <div id="tabla-jugadores-disponibles">
+    22	        <!-- Aquí se cargará la tabla de jugadores con checkboxes (por AJAX) -->
+    23	    </div>
+    24	</div>
+    25	
+    26	<!-- Selección actual (pareja en preparación) -->
+    27	<div class="bloque-pareja-preparacion">
+    28	    <h3>Pareja en preparación</h3>
+    29	    <div id="jugadores-seleccionados">
+    30	        <!-- Aquí aparecerán los nombres de los dos jugadores seleccionados -->
+    31	    </div>
+    32	    <button id="btn-confirmar-pareja" disabled>Confirmar pareja</button>
+    33	</div>
+    34	
+    35	<!-- Tabla de parejas ya confirmadas -->
+    36	<div class="bloque-parejas-confirmadas">
+    37	    <h3>Parejas confirmadas en este torneo</h3>
+    38	    <div id="tabla-parejas-confirmadas">
+    39	        <!-- Aquí se cargará por AJAX la lista de parejas guardadas -->
+    40	    </div>
+    41	</div>
+    42	
+    43	<div class="mensaje-parejas" id="mensaje-parejas" style="display:none;">
+    44	    <!-- Aquí se mostrarán los mensajes de éxito/error -->
+    45	</div>

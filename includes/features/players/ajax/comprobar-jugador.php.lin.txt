@@ -1,0 +1,62 @@
+     1	<?php
+     2	/** Antiguo /includes/ajax/ajax-comprobar-jugador.php
+     3	 * AJAX: Comprobar si un jugador existe por email o por nombre+apellidos (sin distinguir mayúsculas/minúsculas)
+     4	 * Utilizado por el JS del formulario para mostrar aviso en tiempo real
+     5	 */
+     6	
+     7	// Hook AJAX para usuarios logueados y visitantes
+     8	add_action('wp_ajax_str_comprobar_jugador', 'str_comprobar_jugador');
+     9	add_action('wp_ajax_nopriv_str_comprobar_jugador', 'str_comprobar_jugador');
+    10	
+    11	function str_comprobar_jugador() {
+    12	    // Recoge y sanitiza los parámetros recibidos
+    13	    $nombre    = isset($_POST['nombre'])    ? sanitize_text_field($_POST['nombre']) : '';
+    14	    $apellidos = isset($_POST['apellidos']) ? sanitize_text_field($_POST['apellidos']) : '';
+    15	    $email     = isset($_POST['email'])     ? sanitize_email($_POST['email']) : '';
+    16	
+    17	    $existe = false;
+    18	
+    19	    // Si hay email, busca por ese campo (ignora mayúsculas/minúsculas)
+    20	    if ($email) {
+    21	        $args = [
+    22	            'post_type' => 'jugador_deportes',
+    23	            'meta_query' => [[
+    24	                'key' => 'email',
+    25	                'value' => $email,
+    26	                'compare' => 'LIKE'
+    27	            ]],
+    28	            'posts_per_page' => 1,
+    29	            'fields' => 'ids',
+    30	        ];
+    31	        $res = get_posts($args);
+    32	        if ($res && count($res) > 0) {
+    33	            $existe = true;
+    34	        }
+    35	    }
+    36	    // Si no hay email pero sí nombre y apellidos, busca por combinación
+    37	    if (!$existe && $nombre && $apellidos) {
+    38	        // Normaliza a minúsculas y quita espacios para comparar
+    39	        $nombre_buscar    = strtolower(str_replace(' ', '', $nombre));
+    40	        $apellidos_buscar = strtolower(str_replace(' ', '', $apellidos));
+    41	
+    42	        $args = [
+    43	            'post_type' => 'jugador_deportes',
+    44	            'posts_per_page' => 50, // Por si hay muchos
+    45	            'post_status' => 'publish',
+    46	            'fields' => 'ids',
+    47	        ];
+    48	        $posts = get_posts($args);
+    49	        foreach ($posts as $pid) {
+    50	            $nom = get_field('nombre', $pid);
+    51	            $ape = get_field('apellido', $pid);
+    52	            $nom = strtolower(str_replace(' ', '', $nom));
+    53	            $ape = strtolower(str_replace(' ', '', $ape));
+    54	            if ($nom === $nombre_buscar && $ape === $apellidos_buscar) {
+    55	                $existe = true;
+    56	                break;
+    57	            }
+    58	        }
+    59	    }
+    60	    // Devuelve el resultado al JS del formulario
+    61	    wp_send_json(['existe' => $existe]);
+    62	}

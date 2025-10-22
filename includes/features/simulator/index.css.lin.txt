@@ -1,0 +1,374 @@
+     1	/* Antiguo: /assets/css/simulador-torneo.css */
+     2	
+     3	.str-simulador-torneo {
+     4	    max-width: 1100px;
+     5	    margin: 30px auto 28px auto;
+     6	    background: #fff;
+     7	    border-radius: 16px;
+     8	    padding: 32px 36px;
+     9	    box-shadow: 0 4px 34px rgba(40,65,100,0.13);
+    10	    display: flex;
+    11	    flex-direction: row;
+    12	    gap: 40px;
+    13	    min-height: 600px;
+    14	}
+    15	
+    16	.str-simulador-torneo-col {
+    17	    flex: 1 1 0;
+    18	    min-width: 330px;
+    19	    display: flex;
+    20	    flex-direction: column;
+    21	    justify-content: flex-start;
+    22	}
+    23	
+    24	/* Formulario en la columna izquierda */
+    25	.str-simulador-formulario {
+    26	    width: 100%;
+    27	}
+    28	
+    29	/* Resultados en la columna derecha */
+    30	.str-simulador-visual {
+    31	    width: 100%;
+    32	    margin-top: 0;
+    33	}
+    34	
+    35	/* Título */
+    36	.str-simulador-torneo h1 {
+    37	    font-size: 2.15rem;
+    38	    font-weight: 700;
+    39	    color: #1a2156;
+    40	    margin-bottom: 28px;
+    41	    text-align: left;
+    42	    margin-top: 0;
+    43	}
+    44	
+    45	@media (max-width: 1100px) {
+    46	    .str-simulador-torneo {
+    47	        max-width: 99vw;
+    48	        padding: 20px 4vw 20px 4vw;
+    49	        gap: 16px;
+    50	    }
+    51	    .str-simulador-torneo-col { min-width: 0; }
+    52	}
+    53	
+    54	@media (max-width: 900px) {
+    55	    .str-simulador-torneo {
+    56	        flex-direction: column;
+    57	        padding: 16px 2vw 16px 2vw;
+    58	    }
+    59	    .str-simulador-visual { margin-top: 18px; }
+    60	}
+    61	
+    62	/* Grupos */
+    63	.simulador-grupos-lista {
+    64	    display: flex;
+    65	    flex-wrap: wrap;
+    66	    gap: 28px;
+    67	    margin-bottom: 32px;
+    68	    justify-content: flex-start;
+    69	}
+    70	.simulador-grupo-bloque {
+    71	    background: #f8fbff;
+    72	    border-radius: 13px;
+    73	    padding: 20px 22px 16px 22px;
+    74	    min-width: 200px;
+    75	    flex: 1 1 200px;
+    76	    box-shadow: 0 1px 9px rgba(40,65,100,0.07);
+    77	    margin-bottom: 10px;
+    78	}
+    79	.simulador-grupo-nombre {
+    80	    font-size: 1.15em;
+    81	    color: #183C86;
+    82	    font-weight: 700;
+    83	    margin-bottom: 7px;
+    84	}
+    85	.simulador-grupo-bloque ul {
+    86	    list-style: disc inside;
+    87	    padding-left: 0;
+    88	    margin: 0 0 6px 0;
+    89	}
+    90	.simulador-grupo-bloque li {
+    91	    color: #1a2156;
+    92	    font-size: 1.01em;
+    93	    margin-bottom: 2px;
+    94	}
+    95	.simulador-grupo-bloque .simulador-clasificado {
+    96	    font-weight: bold !important;
+    97	}
+    98	.simulador-grupo-info {
+    99	    color: #5984cc;
+   100	    font-style: italic;
+   101	    font-size: 1em;
+   102	    margin-top: 7px;
+   103	}
+   104	
+   105	/* Cuadro final */
+   106	.simulador-cuadro-final {
+   107	    background: #fafdff;
+   108	    border-radius: 12px;
+   109	    padding: 24px 18px 24px 18px;
+   110	    margin-top: 18px;
+   111	    box-shadow: 0 2px 10px rgba(40,65,100,0.06);
+   112	}
+   113	.simulador-cuadro-final h3 {
+   114	    font-size: 1.28rem;
+   115	    font-weight: 700;
+   116	    color: #1a2156;
+   117	    margin-bottom: 14px;
+   118	}
+   119	.simulador-cuadro-grupo {
+   120	    margin-bottom: 16px;
+   121	}
+   122	.simulador-cuadro-grupo-titulo {
+   123	    font-size: 1.05em;
+   124	    font-weight: 700;
+   125	    color: #183C86;
+   126	    margin-bottom: 7px;
+   127	}
+   128	.simulador-cuadro-ronda {
+   129	    margin-bottom: 12px;
+   130	}
+   131	.simulador-cuadro-titulo {
+   132	    font-weight: 600;
+   133	    color: #1a2156;
+   134	    margin-bottom: 7px;
+   135	}
+   136	.simulador-cuadro-matches {
+   137	    display: flex;
+   138	    flex-wrap: wrap;
+   139	    gap: 14px 26px;
+   140	}
+   141	.simulador-cuadro-match {
+   142	    background: #eaf1fb;
+   143	    border-radius: 10px;
+   144	    padding: 11px 24px;
+   145	    font-weight: 500;
+   146	    color: #174db9;
+   147	    font-size: 1.09em;
+   148	    margin-bottom: 5px;
+   149	    display: flex;
+   150	    align-items: center;
+   151	    gap: 11px;
+   152	}
+   153	.simulador-cuadro-match b {
+   154	    color: #2051aa;
+   155	    margin: 0 8px;
+   156	    font-weight: bold;
+   157	}
+   158	
+   159	/* Mensajes educativos y errores (estilo base) */
+   160	.simulador-msg-sugerencias {
+   161	    margin-top: 16px;
+   162	    margin-bottom: 14px;
+   163	    font-size: 1.10em;
+   164	    color: #174db9;
+   165	    font-weight: 500;
+   166	    min-height: 24px;
+   167	}
+   168	
+   169	/* Variantes de color para textos de mensaje */
+   170	.simulador-msg-sugerencias .msg-error {
+   171	    color: #d9534f;
+   172	    font-weight: 500;
+   173	}
+   174	.simulador-msg-sugerencias .msg-ok {
+   175	    color: #15803d;
+   176	    font-weight: 500;
+   177	}
+   178	.simulador-msg-sugerencias .msg-warning {
+   179	    color: #e5771a;
+   180	    font-weight: 700;
+   181	}
+   182	
+   183	/* Inputs y botones */
+   184	.str-simulador-form-group {
+   185	    margin-bottom: 22px;
+   186	}
+   187	.str-simulador-form-group label {
+   188	    display: block;
+   189	    font-weight: 600;
+   190	    margin-bottom: 6px;
+   191	    color: #2444a1;
+   192	}
+   193	.str-simulador-form-group input[type="number"],
+   194	.str-simulador-form-group select {
+   195	    width: 100%;
+   196	    padding: 9px 14px;
+   197	    font-size: 1.08em;
+   198	    border: 1.5px solid #bed0ee;
+   199	    border-radius: 8px;
+   200	    outline: none;
+   201	    transition: border .16s;
+   202	    background: #f9fbfd;
+   203	}
+   204	.str-simulador-form-group input[type="number"]:focus,
+   205	.str-simulador-form-group select:focus {
+   206	    border-color: #2152ff;
+   207	    background: #f1f6ff;
+   208	}
+   209	.str-btn-simular {
+   210	    display: block;
+   211	    width: 100%;
+   212	    padding: 12px 0;
+   213	    background: linear-gradient(92deg, #2152ff 0%, #3273f8 100%);
+   214	    color: #fff;
+   215	    border: none;
+   216	    border-radius: 9px;
+   217	    font-size: 1.12rem;
+   218	    font-weight: 700;
+   219	    cursor: pointer;
+   220	    margin-top: 12px;
+   221	    transition: background 0.15s, transform 0.06s ease-in-out;
+   222	    box-shadow: 0 2px 8px rgba(90,110,160,0.07);
+   223	}
+   224	.str-btn-simular:hover {
+   225	    background: linear-gradient(92deg, #254a8a 0%, #3576ec 100%);
+   226	}
+   227	.str-btn-simular:active {
+   228	    transform: translateY(1px);
+   229	}
+   230	
+   231	/* Radios */
+   232	.simulador-final-opciones label {
+   233	    font-weight: 500;
+   234	    margin-right: 16px;
+   235	    cursor: pointer;
+   236	}
+   237	.simulador-final-opciones input[type="radio"] {
+   238	    margin-right: 4px;
+   239	    accent-color: #2051aa;
+   240	}
+   241	
+   242	/* Responsive ajustes de columnas */
+   243	@media (max-width: 1100px) {
+   244	    .str-simulador-torneo {
+   245	        flex-direction: column;
+   246	        gap: 24px;
+   247	        min-height: unset;
+   248	    }
+   249	}
+   250	
+   251	/* Responsive grupos y matches */
+   252	@media (max-width: 900px) {
+   253	    .simulador-grupos-lista { gap: 16px; }
+   254	    .simulador-grupo-bloque { padding: 14px 8px 12px 8px; min-width: 140px; }
+   255	    .simulador-cuadro-final { padding: 14px 4vw; }
+   256	    .str-simulador-torneo { padding: 12px 2vw 12px 2vw; }
+   257	}
+   258	@media (max-width: 600px) {
+   259	    .simulador-grupos-lista { flex-direction: column; gap: 12px; }
+   260	    .simulador-cuadro-matches { flex-direction: column; gap: 9px; }
+   261	    .simulador-cuadro-final { padding: 10px 2vw; }
+   262	}
+   263	
+   264	/* ────────────────────────────────────────────────────────────── */
+   265	/* NUEVO: Estilos mínimos para avisos y CTAs (no altera estética) */
+   266	/* ────────────────────────────────────────────────────────────── */
+   267	
+   268	/* Solo añadimos un “card” sutil al bloque de sugerencias */
+   269	.simulador-msg-sugerencias {
+   270	    background: #f7fbff;
+   271	    border: 1px solid #e0ecff;
+   272	    border-radius: 10px;
+   273	    padding: 12px 14px;
+   274	}
+   275	
+   276	/* Afinar jerarquía de mensajes dentro del aviso (espaciado) */
+   277	.simulador-msg-sugerencias .msg-warning,
+   278	.simulador-msg-sugerencias .msg-error,
+   279	.simulador-msg-sugerencias .msg-ok {
+   280	    display: block;
+   281	    margin-bottom: 6px;
+   282	}
+   283	
+   284	/* Botones de acción rápida (inyectados por backend/JS) */
+   285	.str-btn-ajustar-jugadores,
+   286	.str-btn-ajustar-fase,
+   287	.str-btn-ajustar-grupos {
+   288	    display: inline-flex;
+   289	    align-items: center;
+   290	    gap: 8px;
+   291	    padding: 9px 14px;
+   292	    border-radius: 8px;
+   293	    font-size: 0.98rem;
+   294	    font-weight: 600;
+   295	    cursor: pointer;
+   296	    transition: transform .06s ease-in-out, box-shadow .15s;
+   297	    user-select: none;
+   298	    text-decoration: none;
+   299	}
+   300	
+   301	/* Estilos por defecto por si el backend no aporta inline styles */
+   302	.str-btn-ajustar-jugadores {
+   303	    border: 1px solid #2152ff;
+   304	    background: #f1f6ff;
+   305	    color: #1a2156;
+   306	    box-shadow: 0 1px 4px rgba(33,82,255,0.08);
+   307	}
+   308	.str-btn-ajustar-jugadores:hover { box-shadow: 0 2px 8px rgba(33,82,255,0.14); }
+   309	.str-btn-ajustar-jugadores:active { transform: translateY(1px); }
+   310	
+   311	.str-btn-ajustar-fase {
+   312	    border: 1px solid #15803d;
+   313	    background: #ecfdf5;
+   314	    color: #0d5132;
+   315	    box-shadow: 0 1px 4px rgba(21,128,61,0.08);
+   316	}
+   317	.str-btn-ajustar-fase:hover { box-shadow: 0 2px 8px rgba(21,128,61,0.14); }
+   318	.str-btn-ajustar-fase:active { transform: translateY(1px); }
+   319	
+   320	/* Tercer CTA: Ajustar a N grupos (tono violeta por defecto) */
+   321	.str-btn-ajustar-grupos {
+   322	    border: 1px solid #8b5cf6;
+   323	    background: #f5f3ff;
+   324	    color: #3f3cbb;
+   325	    box-shadow: 0 1px 4px rgba(139,92,246,0.10);
+   326	}
+   327	.str-btn-ajustar-grupos:hover { box-shadow: 0 2px 8px rgba(139,92,246,0.18); }
+   328	.str-btn-ajustar-grupos:active { transform: translateY(1px); }
+   329	
+   330	/* Botones a ancho completo en móvil */
+   331	@media (max-width: 600px) {
+   332	    .str-btn-ajustar-jugadores,
+   333	    .str-btn-ajustar-fase,
+   334	    .str-btn-ajustar-grupos {
+   335	        width: 100%;
+   336	        justify-content: center;
+   337	    }
+   338	}
+   339	
+   340	/* ============================================================= */
+   341	/* ===  Modal “Editar torneo” — centrado robusto (único fix) === */
+   342	/* ============================================================= */
+   343	
+   344	/* 1) Respetar el cierre si viene con display:none inline */
+   345	#modal-editar-torneo[style*="display: none"] {
+   346	  display: none !important;
+   347	}
+   348	
+   349	/* 2) jQuery .fadeIn() suele poner display:block: lo forzamos a flex */
+   350	#modal-editar-torneo[style*="display:block"],
+   351	#modal-editar-torneo {
+   352	  display: flex !important;
+   353	}
+   354	
+   355	/* 3) Overlay a pantalla completa y centrado seguro */
+   356	#modal-editar-torneo {
+   357	  position: fixed !important;
+   358	  inset: 0 !important;
+   359	  z-index: 99999 !important;
+   360	  padding: 16px;
+   361	  background: rgba(0,0,0,.5);
+   362	  align-items: center;
+   363	  justify-content: center;
+   364	  box-sizing: border-box;
+   365	}
+   366	
+   367	/* 4) Normalizar el contenedor del formulario (primer hijo) */
+   368	#modal-editar-torneo > .saas-tr-modal__dialog,
+   369	#modal-editar-torneo > div {
+   370	  margin: 0 !important;
+   371	  max-width: 720px;
+   372	  width: min(96vw, 720px);
+   373	  box-sizing: border-box;
+   374	}

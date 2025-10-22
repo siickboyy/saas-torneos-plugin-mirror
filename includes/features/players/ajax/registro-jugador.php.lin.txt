@@ -1,0 +1,131 @@
+     1	<?php
+     2	// Antiguo /includes/ajax/ajax-registro-jugador.php
+     3	
+     4	add_action('wp_ajax_nopriv_str_registro_jugador', 'str_ajax_registro_jugador');
+     5	add_action('wp_ajax_str_registro_jugador', 'str_ajax_registro_jugador');
+     6	
+     7	function str_ajax_registro_jugador() {
+     8	    // 1. Recoger datos POST
+     9	    $token      = isset($_POST['token'])      ? sanitize_text_field($_POST['token'])      : '';
+    10	    $jugador_id = isset($_POST['jugador_id']) ? intval($_POST['jugador_id'])              : 0;
+    11	    $nombre     = isset($_POST['nombre'])     ? sanitize_text_field($_POST['nombre'])     : '';
+    12	    $apellidos  = isset($_POST['apellidos'])  ? sanitize_text_field($_POST['apellidos'])  : '';
+    13	    $email      = isset($_POST['email'])      ? sanitize_email($_POST['email'])           : '';
+    14	    $telefono   = isset($_POST['telefono'])   ? sanitize_text_field($_POST['telefono'])   : '';
+    15	    $password   = isset($_POST['password'])   ? $_POST['password']                        : '';
+    16	
+    17	    // 2. Validaciones mínimas
+    18	    if (!$token || !$jugador_id || !$nombre || !$apellidos || !$email || !$password) {
+    19	        wp_send_json_error(['mensaje' => 'Faltan datos obligatorios.']);
+    20	        exit;
+    21	    }
+    22	
+    23	    // 3. Buscar el post de jugador correspondiente
+    24	    $jugador_post = get_post($jugador_id);
+    25	    if (!$jugador_post || get_post_type($jugador_id) !== 'jugador_deportes') {
+    26	        wp_send_json_error(['mensaje' => 'Token inválido o jugador no encontrado.']);
+    27	        exit;
+    28	    }
+    29	
+    30	    // 4. Validar token
+    31	    $token_cpt = get_field('token_invitacion', $jugador_id);
+    32	    if ($token !== $token_cpt) {
+    33	        wp_send_json_error(['mensaje' => 'Token inválido o expirado.']);
+    34	        exit;
+    35	    }
+    36	
+    37	    // 5. Comprobar si ya existe usuario por email
+    38	    if (email_exists($email)) {
+    39	        wp_send_json_error(['mensaje' => 'Ya existe una cuenta con ese email. Si ya te registraste, inicia sesión.']);
+    40	        exit;
+    41	    }
+    42	
+    43	    // 6. Crear usuario de WP
+    44	    $username = sanitize_user(strtolower(str_replace(' ', '', $nombre . $apellidos)));
+    45	    $username = wp_unique_username($username, $email);
+    46	
+    47	    $user_id = wp_insert_user([
+    48	        'user_login'    => $username,
+    49	        'user_email'    => $email,
+    50	        'user_pass'     => $password,
+    51	        'display_name'  => $nombre . ' ' . $apellidos,
+    52	        'first_name'    => $nombre,
+    53	        'last_name'     => $apellidos,
+    54	        'role'          => 'jugador' // Asegúrate de que este rol existe
+    55	    ]);
+    56	
+    57	    if (is_wp_error($user_id)) {
+    58	        wp_send_json_error(['mensaje' => 'No se pudo crear el usuario. ' . $user_id->get_error_message()]);
+    59	        exit;
+    60	    }
+    61	
+    62	    // 7. Actualizar el CPT jugador
+    63	    update_field('nombre', $nombre, $jugador_id);
+    64	    update_field('apellido', $apellidos, $jugador_id);
+    65	    update_field('email', $email, $jugador_id);
+    66	    update_field('telefono', $telefono, $jugador_id);
+    67	    update_field('user_id', $user_id, $jugador_id); // Relación con el usuario
+    68	    update_field('estado_invitacion', 'aceptado', $jugador_id);
+    69	
+    70	    // Opcional: Borrar token para que no se pueda reutilizar
+    71	    update_field('token_invitacion', '', $jugador_id);
+    72	
+    73	    // 8. ENVIAR EMAIL DE BIENVENIDA
+    74	    // Datos adicionales
+    75	    $torneos = get_field('torneos_asociados', $jugador_id);
+    76	    $redirect_url = home_url('/');
+    77	    $nombre_torneo = '';
+    78	    $fecha_torneo = '';
+    79	    $hora_torneo = '';
+    80	
+    81	    if ($torneos && is_array($torneos) && count($torneos)) {
+    82	        $torneo_id = $torneos[0];
+    83	        $redirect_url = get_permalink($torneo_id);
+    84	        $nombre_torneo = get_the_title($torneo_id);
+    85	        $grupo_torneo = get_field('tipo_competicion_torneo', $torneo_id);
+    86	        if (is_array($grupo_torneo)) {
+    87	            $fecha_torneo = isset($grupo_torneo['fecha_torneo']) ? $grupo_torneo['fecha_torneo'] : '';
+    88	            $hora_torneo  = isset($grupo_torneo['hora_inicio']) ? $grupo_torneo['hora_inicio'] : '';
+    89	        }
+    90	    }
+    91	
+    92	    // Mensaje de bienvenida
+    93	    $asunto = 'Bienvenido a padelXperience';
+    94	    $cuerpo = "¡Hola $nombre!\n\n";
+    95	    $cuerpo .= "Te has registrado en padelXperience para poder jugar la competición \"$nombre_torneo\" el $fecha_torneo";
+    96	    if ($hora_torneo) $cuerpo .= " a las $hora_torneo";
+    97	    $cuerpo .= ".\n\n";
+    98	    $cuerpo .= "Podrás consultar tus estadísticas, partidos e incluso apuntar los resultados. Tus datos no se compartirán con ningún tercero.\n";
+    99	    $cuerpo .= "Una vez iniciado sesión con nosotros, podrás participar en otros torneos y deportes, teniendo siempre acceso a estadísticas y posibilidad de apuntar resultados de partidos.\n\n";
+   100	    $cuerpo .= "👉 Accede a tu perfil: " . wp_login_url() . "\n";
+   101	    if ($redirect_url) {
+   102	        $cuerpo .= "👉 Accede al torneo: $redirect_url\n";
+   103	    }
+   104	    $cuerpo .= "\nGracias por confiar en nosotros.\n\nEquipo padelXperience";
+   105	
+   106	    $headers = ['Content-Type: text/plain; charset=UTF-8'];
+   107	    $mail_ok = wp_mail($email, $asunto, $cuerpo, $headers);
+   108	
+   109	    // Si quieres, puedes guardar log del envío en el ACF del jugador
+   110	    update_field('estado_bienvenida', $mail_ok ? 'enviado' : 'fallo', $jugador_id);
+   111	
+   112	    // 9. Redirección: Por ahora, redirigimos a la home o a la URL de torneo si tienes la info en el CPT
+   113	    wp_send_json_success([
+   114	        'mensaje' => '¡Registro completado!',
+   115	        'redirect_url' => $redirect_url
+   116	    ]);
+   117	    exit;
+   118	}
+   119	
+   120	// Utilidad: Generar un username único
+   121	if (!function_exists('wp_unique_username')) {
+   122	    function wp_unique_username($base, $email) {
+   123	        $username = $base;
+   124	        $i = 1;
+   125	        while (username_exists($username) || email_exists($username)) {
+   126	            $username = $base . $i;
+   127	            $i++;
+   128	        }
+   129	        return $username;
+   130	    }
+   131	}

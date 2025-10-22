@@ -1,0 +1,110 @@
+     1	<?php
+     2	/**
+     3	 * Loader / Helpers comunes
+     4	 * Ruta: includes/core/loader.php
+     5	 */
+     6	if ( ! defined('ABSPATH') ) exit;
+     7	
+     8	/** ==========================================================
+     9	 * Helpers de rutas/urls
+    10	 * ========================================================== */
+    11	if ( ! function_exists('str_path') ) {
+    12	    function str_path( $rel ) {
+    13	        $rel = ltrim($rel, '/\\');
+    14	        return trailingslashit( STR_PLUGIN_PATH . $rel );
+    15	    }
+    16	}
+    17	if ( ! function_exists('str_url') ) {
+    18	    function str_url( $rel ) {
+    19	        $rel = ltrim($rel, '/\\');
+    20	        return trailingslashit( STR_PLUGIN_URL . $rel );
+    21	    }
+    22	}
+    23	
+    24	/**
+    25	 * Cargar seguro si existe (para migraciones progresivas)
+    26	 */
+    27	if ( ! function_exists('str_require_if_exists') ) {
+    28	    function str_require_if_exists( $abs_path ) {
+    29	        if ( file_exists( $abs_path ) ) {
+    30	            require_once $abs_path;
+    31	            return true;
+    32	        }
+    33	        return false;
+    34	    }
+    35	}
+    36	
+    37	/** ==========================================================
+    38	 * Auto-enqueue de assets co-localizados con una plantilla
+    39	 * (lo usaremos en Fase 2 cuando movamos plantillas a /includes/sports/…)
+    40	 * ========================================================== */
+    41	if ( ! function_exists('str_enqueue_template_assets') ) {
+    42	    /**
+    43	     * @param string $template_abs  Ruta absoluta de la plantilla (ej. …/index.php)
+    44	     * @param string $handle_base   Prefijo de handles (ej. 'saas-padel-torneo')
+    45	     */
+    46	    function str_enqueue_template_assets( $template_abs, $handle_base ) {
+    47	        $dir = dirname( $template_abs );
+    48	        $basename = preg_replace('/\.php$/', '', basename( $template_abs )); // normalmente 'index'
+    49	        $css = $dir . '/' . $basename . '.css';
+    50	        $js  = $dir . '/' . $basename . '.js';
+    51	
+    52	        // Encolar solo si existen (esto no hace nada todavía mientras no movamos plantillas)
+    53	        if ( file_exists( $css ) ) {
+    54	            $rel = str_replace( STR_PLUGIN_PATH, '', $css );
+    55	            wp_enqueue_style( $handle_base . '-css', str_url($rel), [], '1.0' );
+    56	        }
+    57	        if ( file_exists( $js ) ) {
+    58	            $rel = str_replace( STR_PLUGIN_PATH, '', $js );
+    59	            wp_enqueue_script( $handle_base . '-js', str_url($rel), ['jquery'], '1.0', true );
+    60	        }
+    61	    }
+    62	}
+    63	
+    64	/** ==========================================================
+    65	 * Encolado de módulos compartidos (players/pairs/groups…)
+    66	 * (disponible para Fase 2+; ahora no altera nada)
+    67	 * ========================================================== */
+    68	if ( ! function_exists('str_enqueue_shared_modules') ) {
+    69	    function str_enqueue_shared_modules( $args = [] ) {
+    70	        $defaults = [
+    71	            'players'   => false,
+    72	            'pairs'     => false,
+    73	            'groups'    => false,
+    74	            'resultado' => false,
+    75	        ];
+    76	        $a = wp_parse_args( $args, $defaults );
+    77	
+    78	        // PLAYERS
+    79	        if ( $a['players'] ) {
+    80	            $js  = str_path('includes/features/players/index.js');
+    81	            $css = str_path('includes/features/players/index.css');
+    82	            if ( file_exists($js) )  wp_enqueue_script('saas-players-js', str_url('includes/features/players/index.js'), ['jquery'], '1.0', true);
+    83	            if ( file_exists($css) ) wp_enqueue_style('saas-players-css',  str_url('includes/features/players/index.css'), [], '1.0');
+    84	        }
+    85	
+    86	        // PAIRS
+    87	        if ( $a['pairs'] ) {
+    88	            $js  = str_path('includes/features/pairs/index.js');
+    89	            $css = str_path('includes/features/pairs/index.css');
+    90	            if ( file_exists($js) )  wp_enqueue_script('saas-pairs-js', str_url('includes/features/pairs/index.js'), ['jquery'], '1.0', true);
+    91	            if ( file_exists($css) ) wp_enqueue_style('saas-pairs-css',  str_url('includes/features/pairs/index.css'), [], '1.0');
+    92	        }
+    93	
+    94	        // GROUPS
+    95	        if ( $a['groups'] ) {
+    96	            $js  = str_path('includes/features/groups/index.js');
+    97	            $css = str_path('includes/features/groups/index.css');
+    98	            if ( file_exists($js) )  wp_enqueue_script('saas-groups-js', str_url('includes/features/groups/index.js'), ['jquery'], '1.0', true);
+    99	            if ( file_exists($css) ) wp_enqueue_style('saas-groups-css',  str_url('includes/features/groups/index.css'), [], '1.0');
+   100	        }
+   101	
+   102	        // RESULTADOS (ej. pádel)
+   103	        if ( $a['resultado'] ) {
+   104	            $js  = str_path('includes/sports/padel/torneo/form-resultado-partido.js');
+   105	            $css = str_path('includes/sports/padel/torneo/form-resultado-partido.css');
+   106	            if ( file_exists($js) )  wp_enqueue_script('saas-resultados-js', str_url('includes/sports/padel/torneo/form-resultado-partido.js'), ['jquery'], '1.0', true);
+   107	            if ( file_exists($css) ) wp_enqueue_style('saas-resultados-css',  str_url('includes/sports/padel/torneo/form-resultado-partido.css'), [], '1.0');
+   108	        }
+   109	    }
+   110	}

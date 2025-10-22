@@ -1,0 +1,94 @@
+     1	<?php
+     2	/**
+     3	 * Handler AJAX: Renombrar grupo
+     4	 * Acción alias: str_grupo_renombrar  → apunta a saas_grupo_renombrar
+     5	 * Seguridad: check_ajax_referer('str_nonce', '_ajax_nonce')
+     6	 * Permisos: usuario con capacidad para editar el post del grupo
+     7	 * Logs: [GROUPS:RENAME]
+     8	 */
+     9	
+    10	if ( ! defined('ABSPATH') ) { exit; }
+    11	
+    12	if ( ! function_exists('saas_grupo_renombrar') ) {
+    13	    function saas_grupo_renombrar() {
+    14	        try {
+    15	            // Valida nonce (ajustar la clave si tu front usa otra)
+    16	            if ( ! isset($_POST['_ajax_nonce']) ) {
+    17	                wp_send_json_error(['msg' => 'Nonce ausente.'], 400);
+    18	            }
+    19	            check_ajax_referer('str_nonce', '_ajax_nonce');
+    20	
+    21	            $grupo_id        = isset($_POST['grupo_id']) ? absint($_POST['grupo_id']) : 0;
+    22	            $nuevo_nombre    = isset($_POST['nombre']) ? trim(wp_strip_all_tags($_POST['nombre'])) : '';
+    23	            $competicion_id  = isset($_POST['competicion_id']) ? absint($_POST['competicion_id']) : 0;
+    24	
+    25	            if ( ! $grupo_id ) {
+    26	                wp_send_json_error(['msg' => 'ID de grupo inválido.'], 400);
+    27	            }
+    28	
+    29	            $grupo = get_post($grupo_id);
+    30	            if ( ! $grupo || $grupo->post_type !== 'grupo' ) {
+    31	                wp_send_json_error(['msg' => 'El post indicado no es un grupo válido.'], 404);
+    32	            }
+    33	
+    34	            // Permisos mínimos: poder editar ese post
+    35	            if ( ! current_user_can('edit_post', $grupo_id) ) {
+    36	                wp_send_json_error(['msg' => 'Permisos insuficientes.'], 403);
+    37	            }
+    38	
+    39	            // Normaliza nombre
+    40	            $nuevo_nombre = $nuevo_nombre !== '' ? $nuevo_nombre : $grupo->post_title;
+    41	
+    42	            // (Opcional) Evitar duplicados por competición si tenemos su ID
+    43	            if ( $competicion_id ) {
+    44	                $siblings = get_posts([
+    45	                    'post_type'      => 'grupo',
+    46	                    'post_status'    => 'any',
+    47	                    'posts_per_page' => -1,
+    48	                    'post_parent'    => $competicion_id,
+    49	                    'fields'         => 'ids',
+    50	                    'exclude'        => [$grupo_id],
+    51	                ]);
+    52	
+    53	                if ( ! is_wp_error($siblings) && $siblings ) {
+    54	                    foreach ($siblings as $sib_id) {
+    55	                        $sib = get_post($sib_id);
+    56	                        if ( $sib && strcasecmp(trim($sib->post_title), trim($nuevo_nombre)) === 0 ) {
+    57	                            wp_send_json_error(['msg' => 'Ya existe otro grupo con ese nombre en esta competición.'], 409);
+    58	                        }
+    59	                    }
+    60	                }
+    61	            }
+    62	
+    63	            // Actualiza título del post
+    64	            $update = wp_update_post([
+    65	                'ID'         => $grupo_id,
+    66	                'post_title' => $nuevo_nombre,
+    67	            ], true);
+    68	
+    69	            if ( is_wp_error($update) ) {
+    70	                error_log('[GROUPS:RENAME] Error wp_update_post grupo_id='.$grupo_id.' → '.$update->get_error_message());
+    71	                wp_send_json_error(['msg' => 'No se pudo actualizar el nombre del grupo.'], 500);
+    72	            }
+    73	
+    74	            // Si usas ACF "nombre_grupo", mantenlo sincronizado (no es obligatorio)
+    75	            if ( function_exists('update_field') && get_field('nombre_grupo', $grupo_id, false) !== null ) {
+    76	                @update_field('nombre_grupo', $nuevo_nombre, $grupo_id);
+    77	            }
+    78	
+    79	            // Log OK
+    80	            $actor = get_current_user_id();
+    81	            error_log('[GROUPS:RENAME] OK grupo_id='.$grupo_id.' nuevo_nombre="'.$nuevo_nombre.'" actor='.$actor.' comp_id='.$competicion_id);
+    82	
+    83	            wp_send_json_success([
+    84	                'grupo_id'   => $grupo_id,
+    85	                'nombre'     => $nuevo_nombre,
+    86	                'comp_id'    => $competicion_id,
+    87	                'message'    => 'Grupo renombrado correctamente.',
+    88	            ]);
+    89	        } catch (\Throwable $e) {
+    90	            error_log('[GROUPS:RENAME] EXCEPTION '.$e->getMessage());
+    91	            wp_send_json_error(['msg' => 'Excepción no controlada al renombrar el grupo.'], 500);
+    92	        }
+    93	    }
+    94	}

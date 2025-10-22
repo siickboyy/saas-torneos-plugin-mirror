@@ -1,0 +1,33 @@
+     1	<?php
+     2	/**
+     3	 * Registro de roles personalizados para el plugin SaaS Torneos de Raqueta
+     4	 */
+     5	
+     6	// Crear roles personalizados si no existen
+     7	function str_add_custom_roles() {
+     8	
+     9	    // Rol: Cliente
+    10	    if (!get_role('cliente')) {
+    11	        add_role(
+    12	            'cliente',
+    13	            __('Cliente', 'saas-torneos'),
+    14	            [
+    15	                'read' => true,        // Puede ver contenido
+    16	                'edit_posts' => false, // No puede editar entradas
+    17	            ]
+    18	        );
+    19	    }
+    20	
+    21	    // Rol: Jugador
+    22	    if (!get_role('jugador')) {
+    23	        add_role(
+    24	            'jugador',
+    25	            __('Jugador', 'saas-torneos'),
+    26	            [
+    27	                'read' => true,        // Puede ver contenido
+    28	                'edit_posts' => false,
+    29	            ]
+    30	        );
+    31	    }
+    32	}
+    33	add_action('init', 'str_add_custom_roles');

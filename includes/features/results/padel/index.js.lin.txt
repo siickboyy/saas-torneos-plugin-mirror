@@ -1,0 +1,117 @@
+     1	// Antiguo assets/js/form-resultado-partido.js
+     2	document.addEventListener('DOMContentLoaded', function() {
+     3	    const tablaWrap = document.querySelector('.str-partido-tabla-wrap');
+     4	    if (!tablaWrap) {
+     5	        console.log('[JS][form-resultado-partido] No hay tabla de partido en el DOM');
+     6	        return;
+     7	    }
+     8	
+     9	    // === Validación min/max para inputs de sets ===
+    10	    tablaWrap.querySelectorAll('.str-set-input').forEach(input => {
+    11	        input.addEventListener('input', function(e) {
+    12	            let val = parseInt(this.value, 10);
+    13	            if (isNaN(val)) {
+    14	                this.value = '';
+    15	                return;
+    16	            }
+    17	            if (val < 0) this.value = 0;
+    18	            if (val > 7) this.value = 7;
+    19	        });
+    20	    });
+    21	
+    22	    // Botón de confirmar
+    23	    const btnConfirmar = tablaWrap.querySelector('.str-btn-confirmar-resultado');
+    24	    if (!btnConfirmar) {
+    25	        console.log('[JS][form-resultado-partido] No hay botón de confirmar resultado');
+    26	    }
+    27	
+    28	    if (btnConfirmar) {
+    29	        btnConfirmar.addEventListener('click', function(e) {
+    30	            e.preventDefault();
+    31	
+    32	            // Recopilar datos de sets (adaptado a los nombres correctos)
+    33	            let sets = [];
+    34	            let setsTemp = {};
+    35	
+    36	            // Recoger los inputs de juegos
+    37	            tablaWrap.querySelectorAll('.str-set-input').forEach(input => {
+    38	                let setIdx = input.dataset.set;
+    39	                let equipo = input.dataset.equipo;
+    40	                let valor = input.value;
+    41	                if (!setsTemp[setIdx]) setsTemp[setIdx] = {};
+    42	                setsTemp[setIdx][`juegos_equipo_${equipo}`] = valor;
+    43	            });
+    44	
+    45	            // Recoger selects de tipo de set si existen
+    46	            tablaWrap.querySelectorAll('.str-set-tipo').forEach((select, idx) => {
+    47	                if (!setsTemp[idx]) setsTemp[idx] = {};
+    48	                setsTemp[idx]['tipo_set'] = select.value;
+    49	            });
+    50	
+    51	            // Convertir a array y filtrar sets vacíos
+    52	            for (let i = 0; i < Object.keys(setsTemp).length; i++) {
+    53	                let s = setsTemp[i];
+    54	                // Solo añadir si hay algún valor
+    55	                if (
+    56	                    (s.juegos_equipo_1 && s.juegos_equipo_1 !== '') ||
+    57	                    (s.juegos_equipo_2 && s.juegos_equipo_2 !== '')
+    58	                ) {
+    59	                    sets.push({
+    60	                        juegos_equipo_1: s.juegos_equipo_1 || '',
+    61	                        juegos_equipo_2: s.juegos_equipo_2 || '',
+    62	                        tipo_set: s.tipo_set || 'Normal'
+    63	                    });
+    64	                }
+    65	            }
+    66	
+    67	            console.log('[JS][form-resultado-partido] Sets a enviar:', sets);
+    68	
+    69	            if (sets.length === 0) {
+    70	                alert('Debes introducir al menos un set con resultado.');
+    71	                console.log('[JS][form-resultado-partido] No hay sets válidos');
+    72	                return;
+    73	            }
+    74	
+    75	            // Deshabilitar botón para evitar doble envío
+    76	            btnConfirmar.disabled = true;
+    77	            btnConfirmar.textContent = 'Guardando...';
+    78	            console.log('[JS][form-resultado-partido] Enviando datos vía AJAX...', {
+    79	                partido_id: btnConfirmar.dataset.partido,
+    80	                sets: sets
+    81	            });
+    82	
+    83	            // Preparar datos AJAX
+    84	            const data = new FormData();
+    85	            data.append('action', 'str_guardar_resultado');
+    86	            data.append('partido_id', btnConfirmar.dataset.partido);
+    87	            data.append('sets', JSON.stringify(sets));
+    88	
+    89	            // AJAX WordPress
+    90	            fetch(str_ajax_obj.ajax_url, {
+    91	                method: 'POST',
+    92	                credentials: 'same-origin',
+    93	                body: data
+    94	            })
+    95	            .then(response => response.json())
+    96	            .then(res => {
+    97	                btnConfirmar.disabled = false;
+    98	                btnConfirmar.textContent = 'Confirmar resultado';
+    99	                if (res.success) {
+   100	                    console.log('[JS][form-resultado-partido] Resultado guardado correctamente', res);
+   101	                    location.reload();
+   102	                } else {
+   103	                    console.log('[JS][form-resultado-partido] Error al guardar resultado', res);
+   104	                    alert(res.data || 'Error al guardar el resultado');
+   105	                }
+   106	            })
+   107	            .catch(err => {
+   108	                btnConfirmar.disabled = false;
+   109	                btnConfirmar.textContent = 'Confirmar resultado';
+   110	                alert('Error de red al guardar resultado');
+   111	                console.error('[JS][form-resultado-partido] Error de red', err);
+   112	            });
+   113	        });
+   114	    }
+   115	
+   116	    // Puedes añadir aquí logs para eventos de UX dinámicos si vas a implementar sets dinámicos.
+   117	});

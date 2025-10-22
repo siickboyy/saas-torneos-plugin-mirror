@@ -1,0 +1,317 @@
+     1	<?php
+     2	/**
+     3	 * Template: Ficha de Torneo (frontend) — PÁDEL (adaptada a tus ACF)
+     4	 * Ruta: wp-content/plugins/saas-torneos-de-raqueta/includes/sports/padel/torneo/index.php
+     5	 */
+     6	if ( ! defined( 'ABSPATH' ) ) { exit; }
+     7	
+     8	get_header();
+     9	
+    10	global $post;
+    11	$torneo_id = $post ? (int) $post->ID : 0;
+    12	
+    13	
+    14	// URL de edición frontend (permite filtrar desde el plugin/tema)
+    15	$edit_url = apply_filters( 'saas_tr/torneo_edit_url', '', $torneo_id );
+    16	
+    17	/**
+    18	 * Helpers
+    19	 */
+    20	function saas_tr_val($v){ return ($v !== '' && $v !== null) ? $v : ''; }
+    21	function saas_tr_text($v){ $v = saas_tr_val($v); return $v !== '' ? esc_html($v) : '—'; }
+    22	
+    23	/**
+    24	 * ACF “planos” de competición
+    25	 */
+    26	$acf_deporte    = function_exists('get_field') ? get_field('deporte', $torneo_id) : '';
+    27	$acf_tipo       = function_exists('get_field') ? get_field('tipo_competicion', $torneo_id) : '';
+    28	$acf_categoria  = function_exists('get_field') ? get_field('categoria', $torneo_id) : '';
+    29	$acf_formato    = function_exists('get_field') ? get_field('formato_competicion', $torneo_id) : '';
+    30	$acf_sistema    = function_exists('get_field') ? get_field('sistema_puntuacion', $torneo_id) : '';
+    31	$acf_njug       = function_exists('get_field') ? get_field('n_jugadores', $torneo_id) : '';
+    32	$acf_desc       = function_exists('get_field') ? get_field('descripcion_competicion', $torneo_id) : '';
+    33	
+    34	/**
+    35	 * Grupo ACF: tipo_competicion_torneo (fecha/hora)
+    36	 */
+    37	$grp_torneo     = function_exists('get_field') ? get_field('tipo_competicion_torneo', $torneo_id) : '';
+    38	$fecha          = '';
+    39	$hora_i         = '';
+    40	$hora_f         = '';
+    41	
+    42	if (is_array($grp_torneo) && !empty($grp_torneo)) {
+    43	    $fecha  = saas_tr_val( $grp_torneo['fecha_torneo'] ?? '' );
+    44	    $hora_i = saas_tr_val( $grp_torneo['hora_inicio']   ?? '' );
+    45	    $hora_f = saas_tr_val( $grp_torneo['hora_fin']      ?? '' );
+    46	
+    47	    if ($fecha === '') {
+    48	        foreach (['fecha','fecha_evento','dia'] as $k) {
+    49	            if (!empty($grp_torneo[$k])) { $fecha = $grp_torneo[$k]; break; }
+    50	        }
+    51	    }
+    52	    if ($hora_i === '') {
+    53	        foreach (['hora_inicio','hora_incio','inicio','hora_inicio_torneo'] as $k) {
+    54	            if (!empty($grp_torneo[$k])) { $hora_i = $grp_torneo[$k]; break; }
+    55	        }
+    56	    }
+    57	    if ($hora_f === '') {
+    58	        foreach (['hora_fin','fin','hora_fin_torneo'] as $k) {
+    59	            if (!empty($grp_torneo[$k])) { $hora_f = $grp_torneo[$k]; break; }
+    60	        }
+    61	    }
+    62	}
+    63	
+    64	// Fallback metas planas si no vino del grupo
+    65	if ($fecha === '')  { $fecha  = saas_tr_val( get_post_meta($torneo_id, 'fecha', true) ); }
+    66	if ($hora_i === '') { $hora_i = saas_tr_val( get_post_meta($torneo_id, 'hora_inicio', true) ); }
+    67	if ($hora_f === '') { $hora_f = saas_tr_val( get_post_meta($torneo_id, 'hora_fin', true) ); }
+    68	
+    69	?>
+    70	<div class="saas-tr-contenedor saas-tr-torneo" id="saas-tr-torneo"
+    71	     data-torneo-id="<?php echo esc_attr( $torneo_id ); ?>">
+    72	
+    73	    <h1 class="saas-tr-titulo"><?php echo esc_html( get_the_title() ); ?></h1>
+    74	
+    75	    <ul class="saas-tr-meta">
+    76	        <li><strong><?php esc_html_e( 'Deporte', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_deporte); ?></li>
+    77	        <li><strong><?php esc_html_e( 'Tipo de competición', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_tipo); ?></li>
+    78	        <li><strong><?php esc_html_e( 'Categoría', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_categoria); ?></li>
+    79	        <li><strong><?php esc_html_e( 'Formato', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_formato); ?></li>
+    80	        <li><strong><?php esc_html_e( 'Sistema de puntuación', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_sistema); ?></li>
+    81	        <li><strong><?php esc_html_e( 'Nº jugadores', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($acf_njug); ?></li>
+    82	        <li><strong><?php esc_html_e( 'Fecha', 'saas-torneos' ); ?>:</strong> <?php echo saas_tr_text($fecha); ?></li>
+    83	        <li><strong><?php esc_html_e( 'Horario', 'saas-torneos' ); ?>:</strong>
+    84	            <?php
+    85	            $horario = [];
+    86	            if ( $hora_i ) { $horario[] = $hora_i; }
+    87	            if ( $hora_f ) { $horario[] = $hora_f; }
+    88	            echo $horario ? esc_html( implode( ' — ', $horario ) ) : '—';
+    89	            ?>
+    90	        </li>
+    91	        <li><strong><?php esc_html_e( 'Código del torneo', 'saas-torneos' ); ?>:</strong> <?php echo (int) $torneo_id; ?></li>
+    92	    </ul>
+    93	
+    94	    <?php if ($acf_desc): ?>
+    95	        <div class="saas-tr-descripcion">
+    96	            <?php echo wp_kses_post( wpautop( $acf_desc ) ); ?>
+    97	        </div>
+    98	    <?php endif; ?>
+    99	
+   100	    <p>
+   101	        <button type="button"
+   102	                id="btn-editar-torneo"
+   103	                class="saas-tr-btn saas-tr-btn--light"
+   104	                data-torneo-id="<?php echo esc_attr( $torneo_id ); ?>">
+   105	            <?php esc_html_e( 'Editar torneo', 'saas-torneos' ); ?>
+   106	        </button>
+   107	    </p>
+   108	
+   109	
+   110	    <!-- === PAREJAS === -->
+   111	    <section class="saas-tr-bloque saas-tr-bloque--parejas" id="saas-tr-parejas">
+   112	        <h2><?php esc_html_e( 'Parejas', 'saas-torneos' ); ?></h2>
+   113	        <div class="saas-tr-acciones">
+   114	            <button type="button" class="saas-tr-btn js-add-pareja"><?php esc_html_e( '+ Añadir pareja', 'saas-torneos' ); ?></button>
+   115	            <button type="button" class="saas-tr-btn js-add-jugador"><?php esc_html_e( '+ Añadir jugador', 'saas-torneos' ); ?></button>
+   116	        </div>
+   117	
+   118	        <div class="saas-tr-tabla-wrap">
+   119	            <table class="saas-tr-tabla" id="tabla-parejas">
+   120	                <thead>
+   121	                <tr>
+   122	                    <th><?php esc_html_e( 'Nº', 'saas-torneos' ); ?></th>
+   123	                    <th><?php esc_html_e( 'Jugador 1', 'saas-torneos' ); ?></th>
+   124	                    <th><?php esc_html_e( 'Jugador 2', 'saas-torneos' ); ?></th>
+   125	                    <th><?php esc_html_e( 'Acciones', 'saas-torneos' ); ?></th>
+   126	                </tr>
+   127	                </thead>
+   128	                <tbody id="saas-tr-parejas-body"><!-- Relleno por JS (pairs/index.js) --></tbody>
+   129	            </table>
+   130	        </div>
+   131	    </section>
+   132	
+   133	    <!-- === GESTIÓN DE GRUPOS === -->
+   134	    <?php
+   135	// 1) incluir el renderer (solo una vez)
+   136	require_once WP_PLUGIN_DIR . '/saas-torneos-de-raqueta/includes/features/groups/render-grupos.php';
+   137	
+   138	// 2) resolver el ID de la competición que estás mostrando en este template
+   139	//    adapta esto a tu variable real; a modo de ejemplo:
+   140	$comp_id = isset($post) && $post->post_type === 'competicion' ? (int)$post->ID : 0;
+   141	// o si ya tienes la variable $torneo_id / $competicion_id úsala directamente.
+   142	
+   143	// 3) renderizar
+   144	echo str_competicion_grupos_render([
+   145	  'competicion_id' => $comp_id, // <-- pon aquí tu ID real
+   146	  'print_css'      => true       // o false si prefieres usar tus estilos
+   147	]);
+   148	?>
+   149	    <section class="saas-tr-bloque saas-tr-bloque--grupos" id="saas-tr-grupos"
+   150	             data-action-cargar="saas_grupos_cargar"
+   151	             data-action-recalcular="saas_grupos_standings"
+   152	             data-action-asignar-pareja="saas_grupo_asignar_pareja">
+   153	        <h2><?php esc_html_e( 'Gestión de grupos', 'saas-torneos' ); ?></h2>
+   154	
+   155	        <button type="button" class="saas-tr-btn saas-tr-btn--primary js-recalcular-standings">
+   156	            <?php esc_html_e( 'Recalcular clasificación', 'saas-torneos' ); ?>
+   157	        </button>
+   158	
+   159	        <div id="saas-tr-grupos-libres" class="saas-tr-seccion">
+   160	            <h3><?php esc_html_e( 'Grupos y Parejas libres', 'saas-torneos' ); ?></h3>
+   161	            <div class="saas-tr-hint"><?php esc_html_e( 'Cargando grupos y parejas libres…', 'saas-torneos' ); ?></div>
+   162	            <div class="saas-tr-grid" data-slot="grupos"><!-- JS (módulo groups) --></div>
+   163	            <div class="saas-tr-grid" data-slot="parejas-libres"><!-- JS (módulo groups) --></div>
+   164	        </div>
+   165	
+   166	        <div id="saas-tr-standings" class="saas-tr-seccion">
+   167	            <h3><?php esc_html_e( 'Clasificación', 'saas-torneos' ); ?></h3>
+   168	            <div class="saas-tr-hint"><?php esc_html_e( 'Calculando standings…', 'saas-torneos' ); ?></div>
+   169	            <div class="saas-tr-grid" data-slot="standings"><!-- JS (módulo groups) --></div>
+   170	        </div>
+   171	
+   172	        <div id="saas-tr-bracket" class="saas-tr-seccion">
+   173	            <h3><?php esc_html_e( 'Fase final (Bracket)', 'saas-torneos' ); ?></h3>
+   174	            <div class="saas-tr-hint"><?php esc_html_e( 'Acciones para volcar la fase final con los clasificados actuales.', 'saas-torneos' ); ?></div>
+   175	            <div class="saas-tr-grid" data-slot="bracket"><!-- JS (módulo groups) --></div>
+   176	        </div>
+   177	    </section>
+   178	
+   179	    <!-- === PARTIDOS & RESULTADOS (vista co-localizada) === -->
+   180	    <section class="saas-tr-bloque saas-tr-bloque--partidos" id="saas-tr-partidos">
+   181	        <h2><?php esc_html_e( 'Partidos del torneo', 'saas-torneos' ); ?></h2>
+   182	
+   183	        <?php
+   184	        // Consulta de partidos asociados a este torneo
+   185	        // ACF del CPT partido: meta_key 'competicion_padel' con ID del torneo
+   186	        $args = [
+   187	            'post_type'      => 'partido',
+   188	            'posts_per_page' => -1,
+   189	            'post_status'    => ['publish','pending','draft'],
+   190	            'meta_query'     => [
+   191	                [
+   192	                    'key'     => 'competicion_padel',
+   193	                    'value'   => $torneo_id,
+   194	                    'compare' => '='
+   195	                ]
+   196	            ],
+   197	            'orderby' => 'date',
+   198	            'order'   => 'DESC',
+   199	        ];
+   200	        $q_partidos = new WP_Query($args);
+   201	
+   202	        if ($q_partidos->have_posts()):
+   203	            ?>
+   204	            <div class="saas-tr-lista-partidos">
+   205	                <?php
+   206	                while ($q_partidos->have_posts()): $q_partidos->the_post();
+   207	                    $partido_id = (int) get_the_ID();
+   208	
+   209	                    // Incluimos la vista co-localizada del módulo de resultados (Pádel).
+   210	                    $view_resultado = STR_PLUGIN_PATH . 'includes/features/results/padel/view.php';
+   211	                    if (file_exists($view_resultado)) {
+   212	                        $GLOBALS['saas_tr_partido_id'] = $partido_id;
+   213	                        include $view_resultado;
+   214	                        unset($GLOBALS['saas_tr_partido_id']);
+   215	                    } else {
+   216	                        echo '<div class="saas-tr-hint">'.esc_html__('Vista de resultado no encontrada.', 'saas-torneos').'</div>';
+   217	                    }
+   218	                endwhile;
+   219	                wp_reset_postdata();
+   220	                ?>
+   221	            </div>
+   222	        <?php else: ?>
+   223	            <div class="saas-tr-hint">
+   224	                <?php esc_html_e( 'No hay partidos creados para este torneo.', 'saas-torneos' ); ?>
+   225	            </div>
+   226	        <?php endif; ?>
+   227	    </section>
+   228	
+   229	    <!-- ====== MODALES (WRAPPERS) ====== -->
+   230	
+   231	    <!-- Modal: PAREJAS MULTISELECCIÓN (contenido incrustado) -->
+   232	    <div id="modal-parejas-multiseleccion" class="saas-tr-modal" aria-hidden="true" style="display:none;">
+   233	        <div class="saas-tr-modal__backdrop js-close-modal" data-close="overlay"></div>
+   234	
+   235	        <div class="saas-tr-modal__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('Crear parejas para la competición', 'saas-torneos'); ?>">
+   236	            <button type="button" class="saas-tr-modal__close js-close-modal" aria-label="<?php esc_attr_e('Cerrar', 'saas-torneos'); ?>">×</button>
+   237	
+   238	            <div class="saas-tr-modal__content" id="modal-parejas-multiseleccion-content">
+   239	                <?php
+   240	                // El JS de pairs NO descarga por AJAX: necesita el HTML aquí dentro.
+   241	                $form_parejas = STR_PLUGIN_PATH . 'includes/forms/form-parejas-multiseleccion.php';
+   242	                if ( file_exists($form_parejas) ) {
+   243	                    include $form_parejas;
+   244	                } else {
+   245	                    echo '<div class="saas-tr-hint">'.esc_html__('No se encontró el formulario de parejas.', 'saas-torneos').'</div>';
+   246	                }
+   247	                ?>
+   248	            </div>
+   249	        </div>
+   250	    </div>
+   251	
+   252	    <!-- Modal: INVITACIÓN JUGADOR (el contenido lo inyecta players por AJAX) -->
+   253	    <div id="modal-invitacion-jugador" class="saas-tr-modal" aria-hidden="true" style="display:none;">
+   254	        <div class="saas-tr-modal__backdrop js-close-modal" data-close="overlay"></div>
+   255	
+   256	        <div class="saas-tr-modal__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('Añadir jugadores', 'saas-torneos'); ?>">
+   257	            <button type="button" class="saas-tr-modal__close js-close-modal" aria-label="<?php esc_attr_e('Cerrar', 'saas-torneos'); ?>">×</button>
+   258	
+   259	            <div class="saas-tr-modal__content" id="modal-invitacion-jugador-content"><!-- AJAX (players) --></div>
+   260	        </div>
+   261	    </div>
+   262	
+   263	</div>
+   264	
+   265	<!-- Modal Editar Torneo (sin estilos inline; lo estiliza tournaments/index.css) -->
+   266	<div id="modal-editar-torneo" class="saas-tr-modal saas-tr-modal--editar" style="display:none;">
+   267	  <div class="saas-tr-modal__backdrop js-close-modal" data-close="overlay"></div>
+   268	
+   269	  <div class="saas-tr-modal__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('Editar torneo', 'saas-torneos'); ?>">
+   270	    <button type="button" id="cerrar-modal-editar" class="saas-tr-modal__close js-close-modal" aria-label="<?php esc_attr_e('Cerrar', 'saas-torneos'); ?>">×</button>
+   271	
+   272	    <h3 class="saas-tr-modal__title"><?php esc_html_e('Editar torneo', 'saas-torneos'); ?></h3>
+   273	
+   274	    <div class="saas-tr-form-grid">
+   275	      <div class="saas-tr-form-row saas-tr-form-row--full">
+   276	        <label class="saas-tr-label"><?php esc_html_e('Título', 'saas-torneos'); ?></label>
+   277	        <input type="text" name="titulo" value="<?php echo esc_attr(get_the_title($torneo_id)); ?>" class="saas-tr-input">
+   278	      </div>
+   279	
+   280	      <div class="saas-tr-form-row saas-tr-form-row--full">
+   281	        <label class="saas-tr-label"><?php esc_html_e('Descripción', 'saas-torneos'); ?></label>
+   282	        <textarea name="descripcion" rows="4" class="saas-tr-textarea"><?php
+   283	            echo esc_textarea( $acf_desc ?: '' );
+   284	        ?></textarea>
+   285	      </div>
+   286	
+   287	      <div class="saas-tr-form-row">
+   288	        <label class="saas-tr-label"><?php esc_html_e('Fecha', 'saas-torneos'); ?></label>
+   289	        <input type="date" name="fecha_torneo" value="<?php echo esc_attr($fecha); ?>" class="saas-tr-input">
+   290	      </div>
+   291	
+   292	      <div class="saas-tr-form-row">
+   293	        <label class="saas-tr-label"><?php esc_html_e('Hora inicio', 'saas-torneos'); ?></label>
+   294	        <input type="time" name="hora_inicio" value="<?php echo esc_attr($hora_i); ?>" class="saas-tr-input">
+   295	      </div>
+   296	
+   297	      <div class="saas-tr-form-row">
+   298	        <label class="saas-tr-label"><?php esc_html_e('Hora fin', 'saas-torneos'); ?></label>
+   299	        <input type="time" name="hora_fin" value="<?php echo esc_attr($hora_f); ?>" class="saas-tr-input">
+   300	      </div>
+   301	    </div>
+   302	
+   303	    <div class="saas-tr-modal__actions">
+   304	      <button type="button" id="guardar-torneo"
+   305	              data-torneo-id="<?php echo esc_attr( $torneo_id ); ?>"
+   306	              class="saas-tr-btn saas-tr-btn--primary">
+   307	        <?php esc_html_e('Guardar cambios', 'saas-torneos'); ?>
+   308	      </button>
+   309	      <button type="button" id="cancelar-editar-torneo" class="saas-tr-btn saas-tr-btn--light js-close-modal">
+   310	        <?php esc_html_e('Cancelar', 'saas-torneos'); ?>
+   311	      </button>
+   312	    </div>
+   313	  </div>
+   314	</div>
+   315	
+   316	<?php
+   317	get_footer();

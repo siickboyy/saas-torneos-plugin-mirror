@@ -1,0 +1,95 @@
+     1	<?php
+     2	// *Antiguo: includes/ajax/ajax-editar-jugador.php. AJAX: Cargar y guardar datos de jugador vía modal (sólo clientes/administradores)
+     3	
+     4	// Obtener datos actuales del jugador (para rellenar el modal)
+     5	add_action('wp_ajax_str_get_datos_jugador', 'str_get_datos_jugador');
+     6	function str_get_datos_jugador() {
+     7	    if (!current_user_can('manage_options') && !current_user_can('cliente')) {
+     8	        wp_send_json_error(['mensaje' => 'No tienes permisos.']);
+     9	        exit;
+    10	    }
+    11	
+    12	    $jugador_id = isset($_POST['jugador_id']) ? intval($_POST['jugador_id']) : 0;
+    13	    if (!$jugador_id) {
+    14	        wp_send_json_error(['mensaje' => 'ID de jugador no válido.']);
+    15	        exit;
+    16	    }
+    17	
+    18	    // Recuperar campos ACF del jugador
+    19	    $response = [
+    20	        'nombre'   => get_field('nombre', $jugador_id) ?: '',
+    21	        'apellido' => get_field('apellido', $jugador_id) ?: '',
+    22	        'email'    => get_field('email', $jugador_id) ?: '',
+    23	        'telefono' => get_field('telefono', $jugador_id) ?: '',
+    24	    ];
+    25	
+    26	    wp_send_json_success($response);
+    27	    exit;
+    28	}
+    29	
+    30	// Guardar datos editados del jugador (modal)
+    31	add_action('wp_ajax_str_guardar_datos_jugador', 'str_guardar_datos_jugador');
+    32	function str_guardar_datos_jugador() {
+    33	    if (!current_user_can('manage_options') && !current_user_can('cliente')) {
+    34	        wp_send_json_error(['mensaje' => 'No tienes permisos para editar.']);
+    35	        exit;
+    36	    }
+    37	
+    38	    $jugador_id = isset($_POST['jugador_id']) ? intval($_POST['jugador_id']) : 0;
+    39	    if (!$jugador_id) {
+    40	        wp_send_json_error(['mensaje' => 'ID de jugador no válido.']);
+    41	        exit;
+    42	    }
+    43	
+    44	    // Recoger y sanear los datos recibidos
+    45	    $nombre   = isset($_POST['nombre'])   ? sanitize_text_field($_POST['nombre'])     : '';
+    46	    $apellido = isset($_POST['apellido']) ? sanitize_text_field($_POST['apellido'])   : '';
+    47	    $email    = isset($_POST['email'])    ? sanitize_email($_POST['email'])           : '';
+    48	    $telefono = isset($_POST['telefono']) ? sanitize_text_field($_POST['telefono'])   : '';
+    49	
+    50	    // Validación simple
+    51	    if (!$nombre || !$apellido || !$email) {
+    52	        wp_send_json_error(['mensaje' => 'Nombre, apellido y email son obligatorios.']);
+    53	        exit;
+    54	    }
+    55	
+    56	    // Guardar campos ACF
+    57	    update_field('nombre',   $nombre,   $jugador_id);
+    58	    update_field('apellido', $apellido, $jugador_id);
+    59	    update_field('email',    $email,    $jugador_id);
+    60	    update_field('telefono', $telefono, $jugador_id);
+    61	
+    62	    // Nuevo título (nombre + apellido)
+    63	    $nuevo_titulo = $nombre . ' ' . $apellido;
+    64	
+    65	    // Slug (sanitize_title genera un slug compatible con WP)
+    66	    $nuevo_slug = sanitize_title($nuevo_titulo);
+    67	
+    68	    // Recuperar el post actual antes de actualizarlo para comparar el slug
+    69	    $post_actual = get_post($jugador_id);
+    70	    $slug_anterior = $post_actual->post_name;
+    71	
+    72	    // Actualizar el título y el slug
+    73	    wp_update_post([
+    74	        'ID'         => $jugador_id,
+    75	        'post_title' => $nuevo_titulo,
+    76	        'post_name'  => $nuevo_slug
+    77	    ]);
+    78	
+    79	    // Comprobar si la URL ha cambiado (el slug es distinto)
+    80	    $url_nueva = get_permalink($jugador_id);
+    81	    $url_antigua = home_url('/jugador_deportes/' . $slug_anterior . '/'); // Ajusta el CPT/slug si lo cambias
+    82	
+    83	    $cambio_url = ($nuevo_slug !== $slug_anterior);
+    84	
+    85	    // Respuesta AJAX
+    86	    $respuesta = [
+    87	        'mensaje'    => 'Datos actualizados correctamente.',
+    88	        'cambio_url' => $cambio_url,
+    89	        'url_nueva'  => $url_nueva,
+    90	        'url_antigua'=> $url_antigua
+    91	    ];
+    92	
+    93	    wp_send_json_success($respuesta);
+    94	    exit;
+    95	}

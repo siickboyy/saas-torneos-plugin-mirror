@@ -1,0 +1,300 @@
+     1	// Players (invitación) – compatible con legacy
+     2	// (A1) Eliminado el disparador alternativo para evitar colisiones con otros botones.
+     3	// Ahora SOLO abre el modal el botón #btn-abrir-modal-invitacion-jugador
+     4	
+     5	(function (w, d) {
+     6	  'use strict';
+     7	
+     8	  function qs(sel, ctx) { return (ctx || d).querySelector(sel); }
+     9	  function qsa(sel, ctx) { return Array.prototype.slice.call((ctx || d).querySelectorAll(sel)); }
+    10	
+    11	  function boot() {
+    12	    var cfg     = w.str_players_ajax_obj || {};
+    13	    var AJAX    = (cfg.ajax_url) || (w.str_ajax_obj && w.str_ajax_obj.ajax_url) || '';
+    14	    var NONCE   = (cfg.nonce)    || (w.str_ajax_obj && w.str_ajax_obj.nonce)    || '';
+    15	    var TORNEO_ID = parseInt(cfg.post_id || cfg.torneo_id || 0, 10) || 0;
+    16	
+    17	    var ACT = (cfg.actions || {});
+    18	    var ACTIONS = {
+    19	      CARGAR_MODAL: ACT.cargar_modal || 'saas_cargar_modal_invitacion',
+    20	      FORM_AUTO:    ACT.form_auto    || 'saas_invitacion_automatica',
+    21	      FORM_MANUAL:  ACT.form_manual  || 'saas_invitacion_manual',
+    22	      ENVIAR_AUTO:  ACT.enviar_auto  || 'saas_invitacion_enviar',
+    23	      ENVIAR_MAN:   ACT.enviar_manual|| 'saas_invitacion_enviar_manual',
+    24	      REGISTRO:     ACT.registro_token || 'saas_registro_jugador'
+    25	    };
+    26	
+    27	    console.log('[PLAYERS][BOOT]', { AJAX, NONCE, TORNEO_ID, ACTIONS, cfg });
+    28	
+    29	    // ─────────────────────────────────────────────────────────
+    30	    // (A1) Solo este disparador: botón legacy del modal
+    31	    // ─────────────────────────────────────────────────────────
+    32	    var btnLegacy = d.getElementById('btn-abrir-modal-invitacion-jugador'); // único disparador
+    33	
+    34	    function abrirModalInvitacion(e) {
+    35	      if (e) e.preventDefault();
+    36	
+    37	      var overlay = d.getElementById('modal-invitacion-jugador-overlay');
+    38	      if (overlay) {
+    39	        overlay.style.display = 'flex';
+    40	        d.body.classList.add('modal-abierto-invitacion-jugador');
+    41	        return;
+    42	      }
+    43	
+    44	      // Cargar modal por AJAX
+    45	      fetch(AJAX, {
+    46	        method: 'POST',
+    47	        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    48	        body: new URLSearchParams({
+    49	          action: ACTIONS.CARGAR_MODAL,
+    50	          torneo_id: String(TORNEO_ID || ''),
+    51	          nonce: NONCE
+    52	        })
+    53	      })
+    54	      .then(function (res) { return res.json(); })
+    55	      .then(function (data) {
+    56	        if (data && data.success && data.data && data.data.html) {
+    57	          d.body.insertAdjacentHTML('beforeend', data.data.html);
+    58	          iniciarEventosModal();
+    59	        } else {
+    60	          alert('No se pudo cargar el formulario de invitación. Intenta de nuevo.');
+    61	          console.warn('[PLAYERS] Respuesta inválida al cargar modal:', data);
+    62	        }
+    63	      })
+    64	      .catch(function (err) {
+    65	        alert('Error de red al cargar el modal.');
+    66	        console.error('[PLAYERS] Error AJAX cargar modal:', err);
+    67	      });
+    68	    }
+    69	
+    70	    function iniciarEventosModal() {
+    71	      var overlay = d.getElementById('modal-invitacion-jugador-overlay');
+    72	      var btnCerrar = d.getElementById('cerrar-modal-invitacion-jugador');
+    73	      var btnAuto = d.getElementById('btn-seleccionar-automatica');
+    74	      var btnManual = d.getElementById('btn-seleccionar-manual');
+    75	      var contSel = qs('.modal-invitacion-seleccion');
+    76	      var contDyn = d.getElementById('modal-invitacion-jugador-dinamico');
+    77	
+    78	      if (overlay) {
+    79	        overlay.style.display = 'flex';
+    80	        d.body.classList.add('modal-abierto-invitacion-jugador');
+    81	      }
+    82	
+    83	      if (btnCerrar && overlay) {
+    84	        btnCerrar.addEventListener('click', function () {
+    85	          overlay.style.display = 'none';
+    86	          d.body.classList.remove('modal-abierto-invitacion-jugador');
+    87	          if (contSel) contSel.style.display = 'flex';
+    88	          if (contDyn) contDyn.innerHTML = '';
+    89	        });
+    90	      }
+    91	
+    92	      if (overlay) {
+    93	        overlay.addEventListener('click', function (e) {
+    94	          if (e.target === overlay) {
+    95	            overlay.style.display = 'none';
+    96	            d.body.classList.remove('modal-abierto-invitacion-jugador');
+    97	            if (contSel) contSel.style.display = 'flex';
+    98	            if (contDyn) contDyn.innerHTML = '';
+    99	          }
+   100	        });
+   101	      }
+   102	
+   103	      if (btnAuto && contSel && contDyn) {
+   104	        btnAuto.addEventListener('click', function () {
+   105	          contSel.style.display = 'none';
+   106	          fetch(AJAX, {
+   107	            method: 'POST',
+   108	            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+   109	            body: new URLSearchParams({
+   110	              action: ACTIONS.FORM_AUTO,
+   111	              torneo_id: String(TORNEO_ID || '')
+   112	            })
+   113	          })
+   114	          .then(function (res) { return res.json(); })
+   115	          .then(function (data) {
+   116	            if (data && data.success && data.data && data.data.html) {
+   117	              contDyn.innerHTML = data.data.html;
+   118	              var inp = d.getElementById('inv-torneo-id');
+   119	              if (inp && TORNEO_ID) inp.value = String(TORNEO_ID);
+   120	              if (typeof w.strIniciarFormularioInvitacion === 'function') {
+   121	                w.strIniciarFormularioInvitacion(ACTIONS, AJAX, NONCE);
+   122	              }
+   123	            } else {
+   124	              contDyn.innerHTML = '<div style="color:red;text-align:center;">Error al cargar el formulario.</div>';
+   125	            }
+   126	          })
+   127	          .catch(function () {
+   128	            contDyn.innerHTML = '<div style="color:red;text-align:center;">Error de red al cargar el formulario.</div>';
+   129	          });
+   130	        });
+   131	      }
+   132	
+   133	      if (btnManual && contSel && contDyn) {
+   134	        btnManual.addEventListener('click', function () {
+   135	          contSel.style.display = 'none';
+   136	          fetch(AJAX, {
+   137	            method: 'POST',
+   138	            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+   139	            body: new URLSearchParams({
+   140	              action: ACTIONS.FORM_MANUAL,
+   141	              torneo_id: String(TORNEO_ID || '')
+   142	            })
+   143	          })
+   144	          .then(function (res) { return res.json(); })
+   145	          .then(function (data) {
+   146	            if (data && data.success && data.data && data.data.html) {
+   147	              contDyn.innerHTML = data.data.html;
+   148	              var inp = d.getElementById('inv-torneo-id-manual');
+   149	              if (inp && TORNEO_ID) inp.value = String(TORNEO_ID);
+   150	              if (typeof w.strIniciarFormularioInvitacionManual === 'function') {
+   151	                w.strIniciarFormularioInvitacionManual(ACTIONS, AJAX, NONCE);
+   152	              }
+   153	            } else {
+   154	              contDyn.innerHTML = '<div style="color:red;text-align:center;">Error al cargar el formulario manual.</div>';
+   155	            }
+   156	          })
+   157	          .catch(function () {
+   158	            contDyn.innerHTML = '<div style="color:red;text-align:center;">Error de red al cargar el formulario manual.</div>';
+   159	          });
+   160	        });
+   161	      }
+   162	    }
+   163	
+   164	    // Exponer helpers de envío para que usen las acciones correctas
+   165	    w.strIniciarFormularioInvitacion = function (ACTIONS_FROM_PARENT, AJAX_URL, NONCE_TOKEN) {
+   166	      var ACTIONS2 = ACTIONS_FROM_PARENT || ACTIONS;
+   167	      var AJAX2 = AJAX_URL || AJAX;
+   168	      var NONCE2 = NONCE_TOKEN || NONCE;
+   169	
+   170	      var form = d.getElementById('form-invitacion-jugador');
+   171	      var mensaje = d.getElementById('mensaje-invitacion-jugador');
+   172	      var btnEnviar = d.getElementById('btn-enviar-invitacion-jugador');
+   173	
+   174	      if (!form) { console.log('[PLAYERS][FORM AUTO] No encontrado'); return; }
+   175	
+   176	      form.addEventListener('submit', function (e) {
+   177	        e.preventDefault();
+   178	        if (mensaje) mensaje.textContent = '';
+   179	
+   180	        var nombre = form.querySelector('[name="nombre"]').value.trim();
+   181	        var apellidos = form.querySelector('[name="apellidos"]').value.trim();
+   182	        var email = form.querySelector('[name="email"]').value.trim();
+   183	        var telefono = form.querySelector('[name="telefono"]').value.trim();
+   184	        var mensajeTxt = form.querySelector('[name="mensaje"]').value.trim();
+   185	        var asunto = form.querySelector('[name="asunto"]') ? form.querySelector('[name="asunto"]').value.trim() : '';
+   186	        var torneo_id = form.querySelector('[name="torneo_id"]').value;
+   187	
+   188	        if (!nombre || !apellidos || !email || !asunto) {
+   189	          if (mensaje) mensaje.textContent = 'Nombre, apellidos, email y asunto son obligatorios.';
+   190	          return;
+   191	        }
+   192	
+   193	        btnEnviar.disabled = true;
+   194	        btnEnviar.textContent = 'Enviando...';
+   195	
+   196	        var fd = new FormData();
+   197	        fd.append('action', ACTIONS2.ENVIAR_AUTO);
+   198	        fd.append('nombre', nombre);
+   199	        fd.append('apellidos', apellidos);
+   200	        fd.append('email', email);
+   201	        fd.append('telefono', telefono);
+   202	        fd.append('asunto', asunto);
+   203	        fd.append('mensaje', mensajeTxt);
+   204	        fd.append('torneo_id', torneo_id);
+   205	        fd.append('nonce', NONCE2);
+   206	
+   207	        fetch(AJAX2, { method: 'POST', body: fd })
+   208	        .then(function (res) { return res.json(); })
+   209	        .then(function (data) {
+   210	          btnEnviar.disabled = false;
+   211	          btnEnviar.textContent = 'Enviar invitación';
+   212	          if (data && data.success) {
+   213	            if (mensaje) mensaje.textContent = 'Invitación enviada correctamente.';
+   214	            form.reset();
+   215	          } else {
+   216	            if (mensaje) mensaje.textContent = (data && data.data && data.data.mensaje) ? data.data.mensaje : 'Error al enviar la invitación.';
+   217	          }
+   218	        })
+   219	        .catch(function (err) {
+   220	          btnEnviar.disabled = false;
+   221	          btnEnviar.textContent = 'Enviar invitación';
+   222	          if (mensaje) mensaje.textContent = 'Error de red. Intenta de nuevo.';
+   223	          console.error('[PLAYERS][FORM AUTO] Error:', err);
+   224	        });
+   225	      });
+   226	    };
+   227	
+   228	    w.strIniciarFormularioInvitacionManual = function (ACTIONS_FROM_PARENT, AJAX_URL, NONCE_TOKEN) {
+   229	      var ACTIONS2 = ACTIONS_FROM_PARENT || ACTIONS;
+   230	      var AJAX2 = AJAX_URL || AJAX;
+   231	      var NONCE2 = NONCE_TOKEN || NONCE;
+   232	
+   233	      var form = d.getElementById('form-invitacion-jugador-manual');
+   234	      var mensaje = d.getElementById('mensaje-invitacion-jugador-manual');
+   235	      var btnEnviar = d.getElementById('btn-enviar-invitacion-jugador-manual');
+   236	
+   237	      if (!form) { console.log('[PLAYERS][FORM MANUAL] No encontrado'); return; }
+   238	
+   239	      form.addEventListener('submit', function (e) {
+   240	        e.preventDefault();
+   241	        if (mensaje) mensaje.textContent = '';
+   242	
+   243	        var nombre = form.querySelector('[name="nombre"]').value.trim();
+   244	        var apellidos = form.querySelector('[name="apellidos"]').value.trim();
+   245	        var email = form.querySelector('[name="email"]').value.trim();
+   246	        var telefono = form.querySelector('[name="telefono"]').value.trim();
+   247	        var torneo_id = form.querySelector('[name="torneo_id"]').value;
+   248	
+   249	        if (!nombre || !apellidos || !email) {
+   250	          if (mensaje) mensaje.textContent = 'Nombre, apellidos y email son obligatorios.';
+   251	          return;
+   252	        }
+   253	
+   254	        btnEnviar.disabled = true;
+   255	        btnEnviar.textContent = 'Guardando...';
+   256	
+   257	        var fd = new FormData();
+   258	        fd.append('action', ACTIONS2.ENVIAR_MAN);
+   259	        fd.append('nombre', nombre);
+   260	        fd.append('apellidos', apellidos);
+   261	        fd.append('email', email);
+   262	        fd.append('telefono', telefono);
+   263	        fd.append('torneo_id', torneo_id);
+   264	        fd.append('nonce', NONCE2);
+   265	
+   266	        fetch(AJAX2, { method: 'POST', body: fd })
+   267	        .then(function (res) { return res.json(); })
+   268	        .then(function (data) {
+   269	          btnEnviar.disabled = false;
+   270	          btnEnviar.textContent = 'Guardar jugador';
+   271	          if (data && data.success) {
+   272	            if (mensaje) mensaje.textContent = 'Jugador guardado correctamente.';
+   273	            form.reset();
+   274	          } else {
+   275	            if (mensaje) mensaje.textContent = (data && data.data && data.data.mensaje) ? data.data.mensaje : 'Error al guardar el jugador.';
+   276	          }
+   277	        })
+   278	        .catch(function (err) {
+   279	          btnEnviar.disabled = false;
+   280	          btnEnviar.textContent = 'Guardar jugador';
+   281	          if (mensaje) mensaje.textContent = 'Error de red. Intenta de nuevo.';
+   282	          console.error('[PLAYERS][FORM MANUAL] Error:', err);
+   283	        });
+   284	      });
+   285	    };
+   286	
+   287	    // ─────────────────────────────────────────────────────────
+   288	    // Listeners (solo el botón legítimo)
+   289	    // ─────────────────────────────────────────────────────────
+   290	    if (btnLegacy) btnLegacy.addEventListener('click', abrirModalInvitacion);
+   291	
+   292	    console.log('[PLAYERS][READY] Listener activo (legacy only)');
+   293	  }
+   294	
+   295	  if (d.readyState === 'loading') {
+   296	    d.addEventListener('DOMContentLoaded', boot);
+   297	  } else {
+   298	    boot();
+   299	  }
+   300	})(window, document);

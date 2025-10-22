@@ -1,0 +1,93 @@
+     1	/**
+     2	 * TORNEOS · Editar (abrir/cerrar y guardar)
+     3	 * Depende de que el PHP localice `saas_tr_ajax` con { ajax_url, nonce }
+     4	 */
+     5	(function () {
+     6	  function ready(fn) {
+     7	    if (document.readyState === 'loading') {
+     8	      document.addEventListener('DOMContentLoaded', fn, { once: true });
+     9	    } else {
+    10	      fn();
+    11	    }
+    12	  }
+    13	
+    14	  ready(function () {
+    15	    var btnEditar   = document.getElementById('btn-editar-torneo');
+    16	    var modal       = document.getElementById('modal-editar-torneo');
+    17	    var btnCerrar   = document.getElementById('cerrar-modal-editar');
+    18	    var btnGuardar  = document.getElementById('guardar-torneo');
+    19	
+    20	    if (!modal || !btnEditar || !btnGuardar) return;
+    21	
+    22	    var ajax      = (window.saas_tr_ajax || {});                 // <— objeto global LOCALIZADO
+    23	    var ajaxUrl   = ajax.ajax_url || window.ajaxurl || '/wp-admin/admin-ajax.php';
+    24	    var ajaxNonce = ajax.nonce || '';                            // <— nonce que valida PHP
+    25	
+    26	    // Abrir
+    27	    btnEditar.addEventListener('click', function (e) {
+    28	      e.preventDefault();
+    29	      modal.style.display = 'flex';
+    30	      document.documentElement.classList.add('saas-tr-modal-open');
+    31	      document.body.classList.add('saas-tr-modal-open');
+    32	    });
+    33	
+    34	    // Cerrar (X)
+    35	    if (btnCerrar) {
+    36	      btnCerrar.addEventListener('click', function () {
+    37	        modal.style.display = 'none';
+    38	        document.documentElement.classList.remove('saas-tr-modal-open');
+    39	        document.body.classList.remove('saas-tr-modal-open');
+    40	      });
+    41	    }
+    42	
+    43	    // Cerrar al fondo
+    44	    modal.addEventListener('click', function (e) {
+    45	      if (e.target === modal) {
+    46	        modal.style.display = 'none';
+    47	        document.documentElement.classList.remove('saas-tr-modal-open');
+    48	        document.body.classList.remove('saas-tr-modal-open');
+    49	      }
+    50	    });
+    51	
+    52	    // Guardar
+    53	    btnGuardar.addEventListener('click', function () {
+    54	      var torneoId   = btnGuardar.getAttribute('data-torneo-id');
+    55	      if (!torneoId) { alert('ID de torneo no encontrado.'); return; }
+    56	
+    57	      var titulo      = modal.querySelector('input[name="titulo"]')?.value || '';
+    58	      var descripcion = modal.querySelector('textarea[name="descripcion"]')?.value || '';
+    59	      var fecha       = modal.querySelector('input[name="fecha_torneo"]')?.value || '';
+    60	      var horaInicio  = modal.querySelector('input[name="hora_inicio"]')?.value || '';
+    61	      var horaFin     = modal.querySelector('input[name="hora_fin"]')?.value || '';
+    62	
+    63	      var fd = new FormData();
+    64	      fd.append('action', 'saas_tr_torneo_guardar'); // <— DEBE coincidir con el add_action wp_ajax_...
+    65	      fd.append('_ajax_nonce', ajaxNonce);           // <— DEBE coincidir con el check_ajax_referer del PHP
+    66	      fd.append('torneo_id', torneoId);
+    67	      fd.append('titulo', titulo);
+    68	      fd.append('descripcion', descripcion);
+    69	      fd.append('fecha_torneo', fecha);
+    70	      fd.append('hora_inicio', horaInicio);
+    71	      fd.append('hora_fin', horaFin);
+    72	
+    73	      btnGuardar.disabled = true;
+    74	
+    75	      fetch(ajaxUrl, { method: 'POST', body: fd })
+    76	        .then(function (r) { return r.json(); })
+    77	        .then(function (res) {
+    78	          if (res && res.success) {
+    79	            window.location.reload();
+    80	          } else {
+    81	            var msg = (res && res.data) ? res.data : 'No se pudo guardar.';
+    82	            alert('❌ ' + msg);
+    83	            console.error('[TORNEO][GUARDAR] Error:', res);
+    84	          }
+    85	        })
+    86	        .catch(function (err) {
+    87	          alert('❌ Error de red/servidor.');
+    88	          console.error('[TORNEO][GUARDAR] Fetch error:', err);
+    89	        })
+    90	        .finally(function () { btnGuardar.disabled = false; });
+    91	    });
+    92	  });
+    93	})();

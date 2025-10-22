@@ -1,0 +1,145 @@
+     1	<?php
+     2	// AJAX: Cargar grupos de una competición + parejas libres
+     3	// Acción: saas_grupos_cargar
+     4	
+     5	if (!defined('ABSPATH')) { exit; }
+     6	
+     7	add_action('wp_ajax_saas_grupos_cargar', 'saas_grupos_cargar');
+     8	add_action('wp_ajax_nopriv_saas_grupos_cargar', 'saas_grupos_cargar'); // si no procede, quítalo
+     9	
+    10	function saas_grupos_cargar() {
+    11	    $t0 = microtime(true);
+    12	    $req_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('grp_cargar_', true);
+    13	
+    14	    if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+    15	    @ob_start();
+    16	
+    17	    // LOG: entrada cruda
+    18	    if (function_exists('str_escribir_log')) {
+    19	        str_escribir_log('[START] saas_grupos_cargar POST=' . print_r($_POST, true) . ' | req_id='.$req_id, 'GROUPS:CARGAR');
+    20	    }
+    21	
+    22	    // Seguridad
+    23	    $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : (isset($_POST['_ajax_nonce']) ? sanitize_text_field($_POST['_ajax_nonce']) : '');
+    24	    if (!$nonce || !wp_verify_nonce($nonce, 'str_nonce')) {
+    25	        str_escribir_log('[DENY] Nonce inválido | req_id='.$req_id, 'GROUPS:CARGAR');
+    26	        return str_groups_json_error(['message' => 'Nonce inválido.']);
+    27	    }
+    28	
+    29	    $comp_id = isset($_POST['competicion_id']) ? intval($_POST['competicion_id']) : (isset($_POST['post_id']) ? intval($_POST['post_id']) : 0);
+    30	    if (!$comp_id) {
+    31	        str_escribir_log('[DENY] competicion_id vacío | req_id='.$req_id, 'GROUPS:CARGAR');
+    32	        return str_groups_json_error(['message' => 'ID de competición requerido.']);
+    33	    }
+    34	
+    35	    // Query de grupos vinculados a esta competición (CPT: grupo, ACF: torneo_asociado)
+    36	    $grupos = get_posts([
+    37	        'post_type'      => 'grupo',
+    38	        'post_status'    => 'publish',
+    39	        'posts_per_page' => -1,
+    40	        'meta_query'     => [[
+    41	            'key'     => 'torneo_asociado',
+    42	            'value'   => '"' . $comp_id . '"',
+    43	            'compare' => 'LIKE',
+    44	        ]]
+    45	    ]);
+    46	
+    47	    // Todas las parejas del torneo (CPT: pareja, ACF: torneo_asociado)
+    48	    $parejas_torneo = get_posts([
+    49	        'post_type'      => 'pareja',
+    50	        'post_status'    => 'publish',
+    51	        'posts_per_page' => -1,
+    52	        'meta_query'     => [[
+    53	            'key'     => 'torneo_asociado',
+    54	            'value'   => '"' . $comp_id . '"',
+    55	            'compare' => 'LIKE',
+    56	        ]]
+    57	    ]);
+    58	
+    59	    $parejas_ids_torneo = array_map(function($p){ return intval($p->ID); }, $parejas_torneo);
+    60	
+    61	    // Construir estructura grupos
+    62	    $payload_grupos = [];
+    63	    $parejas_asignadas = [];
+    64	
+    65	    foreach ($grupos as $g) {
+    66	        $nombre   = function_exists('get_field') ? get_field('nombre_grupo', $g->ID) : '';
+    67	        $letra    = $nombre ? $nombre : $g->post_title;
+    68	        $miembros = function_exists('get_field') ? get_field('participantes_grupo', $g->ID) : [];
+    69	
+    70	        // Normalizar lista de participantes a IDs
+    71	        $ids = [];
+    72	        if (is_array($miembros)) {
+    73	            foreach ($miembros as $item) {
+    74	                if (is_object($item) && isset($item->ID)) { $ids[] = intval($item->ID); }
+    75	                else { $ids[] = intval($item); }
+    76	            }
+    77	        } elseif (is_numeric($miembros)) {
+    78	            $ids[] = intval($miembros);
+    79	        }
+    80	
+    81	        // Mapear a items del frontend
+    82	        $items = [];
+    83	        foreach ($ids as $pid) {
+    84	            $title = get_the_title($pid);
+    85	            $items[] = [
+    86	                'id'          => $pid,
+    87	                'title'       => $title ?: ('Pareja #'.$pid),
+    88	                'placeholder' => false,
+    89	            ];
+    90	            $parejas_asignadas[] = $pid;
+    91	        }
+    92	
+    93	        $payload_grupos[] = [
+    94	            'id'            => $g->ID,
+    95	            'letra'         => $letra,
+    96	            'tam'           => max(count($ids), 0),
+    97	            'participantes' => $items,
+    98	        ];
+    99	    }
+   100	
+   101	    // Parejas libres = todas del torneo - asignadas a algún grupo
+   102	    $asignadas = array_unique($parejas_asignadas);
+   103	    $libres    = array_values(array_diff($parejas_ids_torneo, $asignadas));
+   104	    $libres_fmt = array_map(function($pid){
+   105	        return [
+   106	            'id'    => $pid,
+   107	            'title' => get_the_title($pid) ?: ('Pareja #'.$pid),
+   108	        ];
+   109	    }, $libres);
+   110	
+   111	    $meta = [
+   112	        'n_grupos'   => count($payload_grupos),
+   113	        'n_parejas'  => count($parejas_ids_torneo),
+   114	        'fase_final' => '',    // reservado
+   115	        'modo_final' => '',    // reservado
+   116	    ];
+   117	
+   118	    $out = [
+   119	        'meta'           => $meta,
+   120	        'grupos'         => $payload_grupos,
+   121	        'parejas_libres' => $libres_fmt,
+   122	    ];
+   123	
+   124	    if (function_exists('str_escribir_log')) {
+   125	        str_escribir_log('[END] OK grupos='.count($payload_grupos).' libres='.count($libres_fmt).' dur_ms='.round((microtime(true)-$t0)*1000).' | req_id='.$req_id, 'GROUPS:CARGAR');
+   126	    }
+   127	
+   128	    return str_groups_json_ok($out);
+   129	}
+   130	
+   131	// Helpers JSON (protegidos para no redeclarar si vienen desde manage.php)
+   132	if ( ! function_exists('str_groups_json_ok') ) {
+   133	    function str_groups_json_ok($data = []) {
+   134	        if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+   135	        wp_send_json_success($data);
+   136	    }
+   137	}
+   138	
+   139	if ( ! function_exists('str_groups_json_error') ) {
+   140	    function str_groups_json_error($data = [], $code = 400) {
+   141	        if (function_exists('ob_get_length') && ob_get_length()) { @ob_end_clean(); }
+   142	        // WP permite enviar código HTTP en el 2º parámetro
+   143	        wp_send_json_error($data, $code);
+   144	    }
+   145	}

@@ -1,0 +1,40 @@
+     1	<?php
+     2	// /includes/forms/form-invitacion-jugador.php
+     3	// Modal para añadir jugadores: selección manual o automática.
+     4	?>
+     5	
+     6	<!-- Overlay para el fondo oscuro del modal -->
+     7	<div id="modal-invitacion-jugador-overlay" class="modal-invitacion-jugador-overlay" style="display:none;">
+     8	    <div class="modal-invitacion-jugador-contenedor">
+     9	        <button id="cerrar-modal-invitacion-jugador" class="cerrar-modal-invitacion-jugador" type="button">&times;</button>
+    10	        <h2 class="titulo-modal-invitacion">Añadir Jugadores</h2>
+    11	        <div class="modal-invitacion-seleccion">
+    12	            <!-- Opción manual -->
+    13	            <div class="modal-invitacion-bloque">
+    14	                <h3>Manualmente</h3>
+    15	                <div class="modal-invitacion-cuadro">
+    16	                    Añadirás los jugadores y parejas manualmente.<br>
+    17	                    No podrán subir resultados ni consultar su posición.<br>
+    18	                    Ideal para competiciones de un día sin interacción del jugador.
+    19	                </div>
+    20	                <button class="btn-seleccionar-modal-invitacion" id="btn-seleccionar-manual">
+    21	                    Seleccionar
+    22	                </button>
+    23	            </div>
+    24	            <!-- Opción automática -->
+    25	            <div class="modal-invitacion-bloque">
+    26	                <h3>Automáticamente</h3>
+    27	                <div class="modal-invitacion-cuadro">
+    28	                    Los jugadores se podrán registrar y añadir resultados,<br>
+    29	                    consultar estadísticas y posiciones.<br>
+    30	                    Ideal para competiciones donde el jugador interactúa.
+    31	                </div>
+    32	                <button class="btn-seleccionar-modal-invitacion" id="btn-seleccionar-automatica" type="button">
+    33	                    Seleccionar
+    34	                </button>
+    35	            </div>
+    36	        </div>
+    37	        <!-- Aquí debajo, JS insertará el formulario real cuando pulses "Automáticamente" -->
+    38	        <div id="modal-invitacion-jugador-dinamico"></div>
+    39	    </div>
+    40	</div>

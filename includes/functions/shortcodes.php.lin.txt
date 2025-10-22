@@ -1,0 +1,12 @@
+     1	<?php
+     2	/**
+     3	 * Archivo de shortcodes del plugin SaaS Torneos de Raqueta
+     4	 */
+     5	
+     6	// Shortcode: [str_login_form]
+     7	function str_shortcode_login_form() {
+     8	    ob_start();
+     9	    include STR_PLUGIN_PATH . 'templates/login/login-form.php';
+    10	    return ob_get_clean();
+    11	}
+    12	add_shortcode('str_login_form', 'str_shortcode_login_form');
