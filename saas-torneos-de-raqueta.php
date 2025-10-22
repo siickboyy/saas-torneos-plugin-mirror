@@ -609,5 +609,5 @@ add_action('wp_enqueue_scripts', function() {
 }, 20);
 
 if (!defined('ABSPATH')) { exit; }
-define('STR_PLUGIN_VERSION', '0.1.3'); // súbelo un número
+define('STR_PLUGIN_VERSION', '0.1.2'); // súbelo un número
 add_shortcode('str_version', fn() => 'SaaS Torneos versión: ' . esc_html(STR_PLUGIN_VERSION));
