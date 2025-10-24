@@ -379,263 +379,278 @@
    379	        const pid  = sel ? parseInt(sel.value || "0", 10) : 0;
    380	
    381	        if (!gid || !pid) {
-   382	          showSelectError(sel, "Selecciona una pareja libre.");
-   383	          return;
-   384	        }
-   385	
-   386	        try {
-   387	          suppressPairsModal(5000);
-   388	          btn.disabled = true; btn.textContent = "Añadiendo...";
-   389	          await asignarPareja(gid, pid);
-   390	          await recargar();
-   391	        } catch (e) {
-   392	          console.error(e); alert(e.message || "No se pudo añadir.");
-   393	        } finally {
-   394	          btn.disabled = false; btn.textContent = "Añadir";
-   395	        }
-   396	      });
-   397	    });
-   398	
-   399	    qsa(".str-btn-remove").forEach(btn => {
-   400	      btn.addEventListener("click", async () => {
-   401	        const gid = parseInt(btn.getAttribute("data-grupo") || "0", 10);
-   402	        const pid = parseInt(btn.getAttribute("data-pareja") || "0", 10);
-   403	        if (!gid || !pid) return;
-   404	        try {
-   405	          btn.disabled = true; btn.textContent = "Quitando...";
-   406	          await quitarPareja(gid, pid);
-   407	          await recargar();
-   408	        } catch (e) {
-   409	          console.error(e); alert(e.message || "No se pudo quitar.");
-   410	        } finally {
-   411	          btn.disabled = false; btn.textContent = "Quitar";
-   412	        }
-   413	      });
-   414	    });
-   415	  }
-   416	
-   417	  // ────────────────────────────────────────────────────────────
-   418	  // Acciones
-   419	  // ────────────────────────────────────────────────────────────
-   420	  async function cargarGrupos() {
-   421	    if (!COMP_ID) return;
-   422	    const data = await postAjax(ACTIONS.cargar, { competicion_id: COMP_ID });
-   423	    state.meta   = data.meta   || state.meta;
-   424	    state.grupos = Array.isArray(data.grupos) ? data.grupos : [];
-   425	    state.libres = Array.isArray(data.parejas_libres) ? data.parejas_libres : [];
-   426	  }
-   427	
-   428	  async function cargarStandings() {
-   429	    try {
-   430	      const data = await postAjax(ACTIONS.standings, { competicion_id: COMP_ID });
-   431	      const wrap = qs("#str-standings");
-   432	      if (wrap) {
-   433	        wrap.innerHTML = `<div class="str-card"><div class="str-card-body"><em>Clasificación actualizada.</em></div></div>`;
-   434	      }
-   435	      void data;
-   436	    } catch (e) {
-   437	      console.error(e);
-   438	    }
-   439	  }
-   440	
-   441	  async function recargar() {
-   442	    await Promise.all([cargarGrupos(), cargarStandings()]);
-   443	    render();
-   444	  }
-   445	
-   446	  // Abre modal (con fallback defensivo a prompt)
-   447	  async function onCrearGrupo() {
-   448	    try {
-   449	      openCreateModal();
-   450	    } catch (e) {
-   451	      let nombre = window.prompt("Nombre del grupo (ej. A, B, C). Deja vacío para autogenerar:");
-   452	      if (nombre == null) return; // cancel
-   453	      nombre = String(nombre).trim();
-   454	      try {
-   455	        await postAjax(ACTIONS.crear, { competicion_id: COMP_ID, nombre });
-   456	        await recargar();
-   457	      } catch (err) {
-   458	        console.error(err); alert(err.message || "No se pudo crear el grupo.");
-   459	      }
-   460	    }
-   461	  }
-   462	
-   463	  async function asignarPareja(grupoId, parejaId) {
-   464	    return postAjax(ACTIONS.asignar || 'saas_grupo_asignar', {
-   465	      competicion_id: COMP_ID,
-   466	      grupo_id: grupoId,
-   467	      pareja_id: parejaId
-   468	    });
-   469	  }
-   470	
-   471	  async function quitarPareja(grupoId, parejaId) {
-   472	    return postAjax(ACTIONS.quitar || 'saas_grupo_quitar', {
-   473	      competicion_id: COMP_ID,
-   474	      grupo_id: grupoId,
-   475	      pareja_id: parejaId
-   476	    });
-   477	  }
-   478	
-   479	  // ────────────────────────────────────────────────────────────
-   480	  // Init
-   481	  // ────────────────────────────────────────────────────────────
-   482	  document.addEventListener("DOMContentLoaded", async () => {
-   483	    if (!COMP_ID) return;
-   484	    try {
-   485	      ensureCreateModal();  // modal montado desde el inicio
-   486	      await cargarGrupos();
-   487	      render();
-   488	      await cargarStandings();
-   489	      console.info('[GROUPS][BOOT]', { AJAX, NONCE, COMP_ID, from: {strTorneo: !!window.strTorneo, str_groups_ajax_obj: !!window.str_groups_ajax_obj}, ACTIONS });
-   490	    } catch (e) {
-   491	      console.error(e);
-   492	    }
-   493	  });
-   494	
-   495	  // Interceptores en captura
-   496	  document.addEventListener('click', function (e) {
-   497	    const btn = e.target && e.target.closest && e.target.closest('#btn-crear-grupo');
-   498	    if (!btn) return;
-   499	    e.preventDefault();
-   500	    e.stopPropagation();
-   501	    e.stopImmediatePropagation();
-   502	    try {
-   503	      openCreateModal();
-   504	    } catch (err) {
-   505	      console.error('[GROUPS][MODAL] fallback por error:', err);
-   506	      const nombre = window.prompt("Nombre del grupo (ej. A, B, C). Deja vacío para autogenerar:");
-   507	      if (nombre != null) {
-   508	        postAjax(ACTIONS.crear || 'saas_grupo_crear', {
-   509	          competicion_id: COMP_ID,
-   510	          nombre: String(nombre).trim()
-   511	        }).then(() => {
-   512	          return Promise.all([
-   513	            (typeof cargarGrupos === 'function' ? cargarGrupos() : Promise.resolve()),
-   514	            (typeof cargarStandings === 'function' ? cargarStandings() : Promise.resolve())
-   515	          ]);
-   516	        }).then(render)
-   517	          .catch((e) => alert(e && e.message ? e.message : 'No se pudo crear el grupo.'));
-   518	      }
-   519	    }
-   520	  }, true);
-   521	
-   522	  document.addEventListener('click', function (e) {
-   523	    const addBtn = e.target && e.target.closest && e.target.closest('#str-gestion-grupos .str-btn-add');
-   524	    if (!addBtn) return;
-   525	    e.stopPropagation();
-   526	    e.stopImmediatePropagation();
-   527	  }, true);
-   528	
-   529	})();
-   530	
-   531	/* ============================================================
-   532	   DEBUG TRACE – clicks + llamadas AJAX (admin-ajax.php)
-   533	   (Elimina este bloque cuando acabes de depurar)
-   534	   ============================================================ */
-   535	(function () {
-   536	  try {
-   537	    var SELECTORES_INTERES = [
-   538	      '.str-btn-add',
-   539	      '.js-add-pareja',
-   540	      '.js-add-pareja-grupo',
-   541	      '#btn-abrir-modal-pareja',
-   542	      '.js-add-jugador',
-   543	      '#btn-abrir-modal-invitacion-jugador'
-   544	    ];
+   382	  if (sel) {
+   383	    sel.classList.add('str-field-error');
+   384	    const holder = sel.closest('.str-card-foot') || sel.parentElement;
+   385	    let tip = holder && holder.querySelector('.str-inline-error');
+   386	    if (!tip && holder) {
+   387	      tip = document.createElement('div');
+   388	      tip.className = 'str-inline-error';
+   389	      tip.textContent = 'Selecciona una pareja libre.';
+   390	      holder.appendChild(tip);
+   391	    }
+   392	    sel.focus();
+   393	    setTimeout(() => {
+   394	      if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
+   395	      sel.classList.remove('str-field-error');
+   396	    }, 2000);
+   397	  }
+   398	  return;
+   399	}
+   400	
+   401	        try {
+   402	          suppressPairsModal(5000);
+   403	          btn.disabled = true; btn.textContent = "Añadiendo...";
+   404	          await asignarPareja(gid, pid);
+   405	          await recargar();
+   406	        } catch (e) {
+   407	          console.error(e); alert(e.message || "No se pudo añadir.");
+   408	        } finally {
+   409	          btn.disabled = false; btn.textContent = "Añadir";
+   410	        }
+   411	      });
+   412	    });
+   413	
+   414	    qsa(".str-btn-remove").forEach(btn => {
+   415	      btn.addEventListener("click", async () => {
+   416	        const gid = parseInt(btn.getAttribute("data-grupo") || "0", 10);
+   417	        const pid = parseInt(btn.getAttribute("data-pareja") || "0", 10);
+   418	        if (!gid || !pid) return;
+   419	        try {
+   420	          btn.disabled = true; btn.textContent = "Quitando...";
+   421	          await quitarPareja(gid, pid);
+   422	          await recargar();
+   423	        } catch (e) {
+   424	          console.error(e); alert(e.message || "No se pudo quitar.");
+   425	        } finally {
+   426	          btn.disabled = false; btn.textContent = "Quitar";
+   427	        }
+   428	      });
+   429	    });
+   430	  }
+   431	
+   432	  // ────────────────────────────────────────────────────────────
+   433	  // Acciones
+   434	  // ────────────────────────────────────────────────────────────
+   435	  async function cargarGrupos() {
+   436	    if (!COMP_ID) return;
+   437	    const data = await postAjax(ACTIONS.cargar, { competicion_id: COMP_ID });
+   438	    state.meta   = data.meta   || state.meta;
+   439	    state.grupos = Array.isArray(data.grupos) ? data.grupos : [];
+   440	    state.libres = Array.isArray(data.parejas_libres) ? data.parejas_libres : [];
+   441	  }
+   442	
+   443	  async function cargarStandings() {
+   444	    try {
+   445	      const data = await postAjax(ACTIONS.standings, { competicion_id: COMP_ID });
+   446	      const wrap = qs("#str-standings");
+   447	      if (wrap) {
+   448	        wrap.innerHTML = `<div class="str-card"><div class="str-card-body"><em>Clasificación actualizada.</em></div></div>`;
+   449	      }
+   450	      void data;
+   451	    } catch (e) {
+   452	      console.error(e);
+   453	    }
+   454	  }
+   455	
+   456	  async function recargar() {
+   457	    await Promise.all([cargarGrupos(), cargarStandings()]);
+   458	    render();
+   459	  }
+   460	
+   461	  // Abre modal (con fallback defensivo a prompt)
+   462	  async function onCrearGrupo() {
+   463	    try {
+   464	      openCreateModal();
+   465	    } catch (e) {
+   466	      let nombre = window.prompt("Nombre del grupo (ej. A, B, C). Deja vacío para autogenerar:");
+   467	      if (nombre == null) return; // cancel
+   468	      nombre = String(nombre).trim();
+   469	      try {
+   470	        await postAjax(ACTIONS.crear, { competicion_id: COMP_ID, nombre });
+   471	        await recargar();
+   472	      } catch (err) {
+   473	        console.error(err); alert(err.message || "No se pudo crear el grupo.");
+   474	      }
+   475	    }
+   476	  }
+   477	
+   478	  async function asignarPareja(grupoId, parejaId) {
+   479	    return postAjax(ACTIONS.asignar || 'saas_grupo_asignar', {
+   480	      competicion_id: COMP_ID,
+   481	      grupo_id: grupoId,
+   482	      pareja_id: parejaId
+   483	    });
+   484	  }
+   485	
+   486	  async function quitarPareja(grupoId, parejaId) {
+   487	    return postAjax(ACTIONS.quitar || 'saas_grupo_quitar', {
+   488	      competicion_id: COMP_ID,
+   489	      grupo_id: grupoId,
+   490	      pareja_id: parejaId
+   491	    });
+   492	  }
+   493	
+   494	  // ────────────────────────────────────────────────────────────
+   495	  // Init
+   496	  // ────────────────────────────────────────────────────────────
+   497	  document.addEventListener("DOMContentLoaded", async () => {
+   498	    if (!COMP_ID) return;
+   499	    try {
+   500	      ensureCreateModal();  // modal montado desde el inicio
+   501	      await cargarGrupos();
+   502	      render();
+   503	      await cargarStandings();
+   504	      console.info('[GROUPS][BOOT]', { AJAX, NONCE, COMP_ID, from: {strTorneo: !!window.strTorneo, str_groups_ajax_obj: !!window.str_groups_ajax_obj}, ACTIONS });
+   505	    } catch (e) {
+   506	      console.error(e);
+   507	    }
+   508	  });
+   509	
+   510	  // Interceptores en captura
+   511	  document.addEventListener('click', function (e) {
+   512	    const btn = e.target && e.target.closest && e.target.closest('#btn-crear-grupo');
+   513	    if (!btn) return;
+   514	    e.preventDefault();
+   515	    e.stopPropagation();
+   516	    e.stopImmediatePropagation();
+   517	    try {
+   518	      openCreateModal();
+   519	    } catch (err) {
+   520	      console.error('[GROUPS][MODAL] fallback por error:', err);
+   521	      const nombre = window.prompt("Nombre del grupo (ej. A, B, C). Deja vacío para autogenerar:");
+   522	      if (nombre != null) {
+   523	        postAjax(ACTIONS.crear || 'saas_grupo_crear', {
+   524	          competicion_id: COMP_ID,
+   525	          nombre: String(nombre).trim()
+   526	        }).then(() => {
+   527	          return Promise.all([
+   528	            (typeof cargarGrupos === 'function' ? cargarGrupos() : Promise.resolve()),
+   529	            (typeof cargarStandings === 'function' ? cargarStandings() : Promise.resolve())
+   530	          ]);
+   531	        }).then(render)
+   532	          .catch((e) => alert(e && e.message ? e.message : 'No se pudo crear el grupo.'));
+   533	      }
+   534	    }
+   535	  }, true);
+   536	
+   537	  document.addEventListener('click', function (e) {
+   538	    const addBtn = e.target && e.target.closest && e.target.closest('#str-gestion-grupos .str-btn-add');
+   539	    if (!addBtn) return;
+   540	    e.stopPropagation();
+   541	    e.stopImmediatePropagation();
+   542	  }, true);
+   543	
+   544	})();
    545	
-   546	    function matchedSelector(el) {
-   547	      for (var i=0;i<SELECTORES_INTERES.length;i++){
-   548	        try { if (el.matches(SELECTORES_INTERES[i])) return SELECTORES_INTERES[i]; } catch(_) {}
-   549	      }
-   550	      return null;
-   551	    }
-   552	
-   553	    document.addEventListener('click', function (e) {
-   554	      var el = e.target, depth = 0, hit = null;
-   555	      while (el && depth < 6 && !hit) {
-   556	        var m = matchedSelector(el);
-   557	        if (m) hit = { node: el, selector: m };
-   558	        el = el.parentElement; depth++;
-   559	      }
-   560	      if (!hit) return;
-   561	
-   562	      var text = (hit.node.textContent || '').trim().slice(0,120);
-   563	      console.groupCollapsed(
-   564	        '%c[TRACE CLICK]%c ' + hit.selector + '  %c' + (text || '(sin texto)'),
-   565	        'color:#0ea5e9;font-weight:700', 'color:inherit', 'color:#64748b'
-   566	      );
-   567	      console.log('Elemento que hizo match:', hit.node);
-   568	      if (hit.node.dataset) console.log('dataset:', JSON.parse(JSON.stringify(hit.node.dataset)));
-   569	      console.trace('Stack');
-   570	      console.groupEnd();
-   571	    }, true);
-   572	
-   573	    if (typeof window.fetch === 'function') {
-   574	      var _fetch = window.fetch;
-   575	      window.fetch = function (input, init) {
-   576	        try {
-   577	          var url = (typeof input === 'string') ? input : (input && input.url) || '';
-   578	          if (url.indexOf('/wp-admin/admin-ajax.php') !== -1) {
-   579	            var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
-   580	            var bodyStr = '';
-   581	            if (init && init.body) {
-   582	              if (typeof init.body === 'string') bodyStr = init.body;
-   583	              else if (init.body instanceof URLSearchParams) bodyStr = init.body.toString();
-   584	              else if (typeof FormData !== 'undefined' && init.body instanceof FormData) {
-   585	                var tmp=[]; init.body.forEach(function(v,k){ tmp.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); });
-   586	                bodyStr = tmp.join('&');
-   587	              }
-   588	            }
-   589	            var m = bodyStr.match(/(?:^|&|;)action=([^&;]+)/i);
-   590	            var actionName = m ? decodeURIComponent(m[1]) : '(sin action)';
-   591	            console.groupCollapsed(
-   592	              '%c[TRACE AJAX]%c ' + method + ' admin-ajax.php  %caction=' + actionName,
-   593	              'color:#22c55e;font-weight:700', 'color:inherit', 'color:#64748b'
-   594	            );
-   595	            if (bodyStr) console.log('Body:', bodyStr.length>500 ? bodyStr.slice(0,500)+'…' : bodyStr);
-   596	            console.trace('Stack');
-   597	            console.groupEnd();
-   598	          }
-   599	        } catch (_) {}
-   600	        return _fetch.apply(this, arguments);
-   601	      };
-   602	    }
-   603	
-   604	    if (window.jQuery && window.jQuery.ajax) {
-   605	      (function ($) {
-   606	        var _ajax = $.ajax;
-   607	        $.ajax = function (opts) {
-   608	          try {
-   609	            var url = (typeof opts === 'string') ? opts : (opts && opts.url) || '';
-   610	            if (url.indexOf('/wp-admin/admin-ajax.php') !== -1) {
-   611	              var dataStr = '';
-   612	              if (opts && opts.data) {
-   613	                if (typeof opts.data === 'string') dataStr = opts.data;
-   614	                else if (opts.data instanceof URLSearchParams) dataStr = opts.data.toString();
-   615	                else if (typeof opts.data === 'object') {
-   616	                  var parts=[]; for (var k in opts.data){ if(Object.prototype.hasOwnProperty.call(opts.data,k)){ parts.push(encodeURIComponent(k)+'='+encodeURIComponent(opts.data[k])); } }
-   617	                  dataStr = parts.join('&');
-   618	                }
-   619	              }
-   620	              var m = dataStr.match(/(?:^|&|;)action=([^&;]+)/i);
-   621	              var actionName = m ? decodeURIComponent(m[1]) : '(sin action)';
-   622	              console.groupCollapsed(
-   623	                '%c[TRACE jQ.AJAX]%c admin-ajax.php  %caction=' + actionName,
-   624	                'color:#84cc16;font-weight:700', 'color:inherit', 'color:#64748b'
-   625	              );
-   626	              if (dataStr) console.log('Data:', dataStr.length>500 ? dataStr.slice(0,500)+'…' : dataStr);
-   627	              console.trace('Stack');
-   628	              console.groupEnd();
-   629	            }
-   630	          } catch(_) {}
-   631	          return _ajax.apply(this, arguments);
-   632	        };
-   633	      })(window.jQuery);
-   634	    }
-   635	
-   636	    console.info('%c[TRACE ACTIVADO]%c Mira la consola: clicks relevantes y AJAX a admin-ajax.php.',
-   637	      'color:#0ea5e9;font-weight:700','color:inherit');
-   638	  } catch (e) {
-   639	    console.error('[TRACE] fallo al inicializar:', e);
-   640	  }
-   641	})();
+   546	/* ============================================================
+   547	   DEBUG TRACE – clicks + llamadas AJAX (admin-ajax.php)
+   548	   (Elimina este bloque cuando acabes de depurar)
+   549	   ============================================================ */
+   550	(function () {
+   551	  try {
+   552	    var SELECTORES_INTERES = [
+   553	      '.str-btn-add',
+   554	      '.js-add-pareja',
+   555	      '.js-add-pareja-grupo',
+   556	      '#btn-abrir-modal-pareja',
+   557	      '.js-add-jugador',
+   558	      '#btn-abrir-modal-invitacion-jugador'
+   559	    ];
+   560	
+   561	    function matchedSelector(el) {
+   562	      for (var i=0;i<SELECTORES_INTERES.length;i++){
+   563	        try { if (el.matches(SELECTORES_INTERES[i])) return SELECTORES_INTERES[i]; } catch(_) {}
+   564	      }
+   565	      return null;
+   566	    }
+   567	
+   568	    document.addEventListener('click', function (e) {
+   569	      var el = e.target, depth = 0, hit = null;
+   570	      while (el && depth < 6 && !hit) {
+   571	        var m = matchedSelector(el);
+   572	        if (m) hit = { node: el, selector: m };
+   573	        el = el.parentElement; depth++;
+   574	      }
+   575	      if (!hit) return;
+   576	
+   577	      var text = (hit.node.textContent || '').trim().slice(0,120);
+   578	      console.groupCollapsed(
+   579	        '%c[TRACE CLICK]%c ' + hit.selector + '  %c' + (text || '(sin texto)'),
+   580	        'color:#0ea5e9;font-weight:700', 'color:inherit', 'color:#64748b'
+   581	      );
+   582	      console.log('Elemento que hizo match:', hit.node);
+   583	      if (hit.node.dataset) console.log('dataset:', JSON.parse(JSON.stringify(hit.node.dataset)));
+   584	      console.trace('Stack');
+   585	      console.groupEnd();
+   586	    }, true);
+   587	
+   588	    if (typeof window.fetch === 'function') {
+   589	      var _fetch = window.fetch;
+   590	      window.fetch = function (input, init) {
+   591	        try {
+   592	          var url = (typeof input === 'string') ? input : (input && input.url) || '';
+   593	          if (url.indexOf('/wp-admin/admin-ajax.php') !== -1) {
+   594	            var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
+   595	            var bodyStr = '';
+   596	            if (init && init.body) {
+   597	              if (typeof init.body === 'string') bodyStr = init.body;
+   598	              else if (init.body instanceof URLSearchParams) bodyStr = init.body.toString();
+   599	              else if (typeof FormData !== 'undefined' && init.body instanceof FormData) {
+   600	                var tmp=[]; init.body.forEach(function(v,k){ tmp.push(encodeURIComponent(k)+'='+encodeURIComponent(v)); });
+   601	                bodyStr = tmp.join('&');
+   602	              }
+   603	            }
+   604	            var m = bodyStr.match(/(?:^|&|;)action=([^&;]+)/i);
+   605	            var actionName = m ? decodeURIComponent(m[1]) : '(sin action)';
+   606	            console.groupCollapsed(
+   607	              '%c[TRACE AJAX]%c ' + method + ' admin-ajax.php  %caction=' + actionName,
+   608	              'color:#22c55e;font-weight:700', 'color:inherit', 'color:#64748b'
+   609	            );
+   610	            if (bodyStr) console.log('Body:', bodyStr.length>500 ? bodyStr.slice(0,500)+'…' : bodyStr);
+   611	            console.trace('Stack');
+   612	            console.groupEnd();
+   613	          }
+   614	        } catch (_) {}
+   615	        return _fetch.apply(this, arguments);
+   616	      };
+   617	    }
+   618	
+   619	    if (window.jQuery && window.jQuery.ajax) {
+   620	      (function ($) {
+   621	        var _ajax = $.ajax;
+   622	        $.ajax = function (opts) {
+   623	          try {
+   624	            var url = (typeof opts === 'string') ? opts : (opts && opts.url) || '';
+   625	            if (url.indexOf('/wp-admin/admin-ajax.php') !== -1) {
+   626	              var dataStr = '';
+   627	              if (opts && opts.data) {
+   628	                if (typeof opts.data === 'string') dataStr = opts.data;
+   629	                else if (opts.data instanceof URLSearchParams) dataStr = opts.data.toString();
+   630	                else if (typeof opts.data === 'object') {
+   631	                  var parts=[]; for (var k in opts.data){ if(Object.prototype.hasOwnProperty.call(opts.data,k)){ parts.push(encodeURIComponent(k)+'='+encodeURIComponent(opts.data[k])); } }
+   632	                  dataStr = parts.join('&');
+   633	                }
+   634	              }
+   635	              var m = dataStr.match(/(?:^|&|;)action=([^&;]+)/i);
+   636	              var actionName = m ? decodeURIComponent(m[1]) : '(sin action)';
+   637	              console.groupCollapsed(
+   638	                '%c[TRACE jQ.AJAX]%c admin-ajax.php  %caction=' + actionName,
+   639	                'color:#84cc16;font-weight:700', 'color:inherit', 'color:#64748b'
+   640	              );
+   641	              if (dataStr) console.log('Data:', dataStr.length>500 ? dataStr.slice(0,500)+'…' : dataStr);
+   642	              console.trace('Stack');
+   643	              console.groupEnd();
+   644	            }
+   645	          } catch(_) {}
+   646	          return _ajax.apply(this, arguments);
+   647	        };
+   648	      })(window.jQuery);
+   649	    }
+   650	
+   651	    console.info('%c[TRACE ACTIVADO]%c Mira la consola: clicks relevantes y AJAX a admin-ajax.php.',
+   652	      'color:#0ea5e9;font-weight:700','color:inherit');
+   653	  } catch (e) {
+   654	    console.error('[TRACE] fallo al inicializar:', e);
+   655	  }
+   656	})();

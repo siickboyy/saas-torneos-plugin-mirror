@@ -379,9 +379,24 @@
         const pid  = sel ? parseInt(sel.value || "0", 10) : 0;
 
         if (!gid || !pid) {
-          showSelectError(sel, "Selecciona una pareja libre.");
-          return;
-        }
+  if (sel) {
+    sel.classList.add('str-field-error');
+    const holder = sel.closest('.str-card-foot') || sel.parentElement;
+    let tip = holder && holder.querySelector('.str-inline-error');
+    if (!tip && holder) {
+      tip = document.createElement('div');
+      tip.className = 'str-inline-error';
+      tip.textContent = 'Selecciona una pareja libre.';
+      holder.appendChild(tip);
+    }
+    sel.focus();
+    setTimeout(() => {
+      if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
+      sel.classList.remove('str-field-error');
+    }, 2000);
+  }
+  return;
+}
 
         try {
           suppressPairsModal(5000);
