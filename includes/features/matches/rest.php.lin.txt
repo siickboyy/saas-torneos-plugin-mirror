@@ -1,0 +1,202 @@
+     1	<?php
+     2	/**
+     3	 * Matches REST API (skeleton)
+     4	 *
+     5	 * @package SaaS_Torneos_Raqueta
+     6	 */
+     7	
+     8	if ( ! defined( 'ABSPATH' ) ) { exit; }
+     9	
+    10	require_once __DIR__ . '/model.php';
+    11	
+    12	add_action( 'rest_api_init', function () {
+    13	
+    14		$ns = 'saas/v1';
+    15	
+    16		/**
+    17		 * GET /matches
+    18		 */
+    19		register_rest_route( $ns, '/matches', array(
+    20			'methods'             => WP_REST_Server::READABLE,
+    21			'permission_callback' => function( $request ) {
+    22				$user = wp_get_current_user();
+    23				$cid  = (int) $request->get_param( 'competicion_id' );
+    24				$ok   = str_matches_user_can( $user, 'read', $cid );
+    25				if ( ! $ok ) {
+    26					return new WP_Error( 'forbidden', 'No autorizado para ver estos partidos', array( 'status' => 403 ) );
+    27				}
+    28				return true;
+    29			},
+    30			'callback'            => function( WP_REST_Request $request ) {
+    31				$params = $request->get_params();
+    32				str_matches_log( 'API', array( 'op' => 'GET /matches', 'params' => $params ) );
+    33	
+    34				$page     = max( 1, (int) ( $params['page'] ?? 1 ) );
+    35				$per_page = min( 200, max( 1, (int) ( $params['per_page'] ?? 50 ) ) );
+    36	
+    37				// Skeleton: lista vacía con paginación
+    38				$response = array(
+    39					'items'      => array(),
+    40					'pagination' => array(
+    41						'page'     => $page,
+    42						'per_page' => $per_page,
+    43						'total'    => 0,
+    44					),
+    45				);
+    46	
+    47				return rest_ensure_response( $response );
+    48			},
+    49		) );
+    50	
+    51		/**
+    52		 * POST /matches
+    53		 */
+    54		register_rest_route( $ns, '/matches', array(
+    55			'methods'             => WP_REST_Server::CREATABLE,
+    56			'permission_callback' => function( $request ) {
+    57				$user = wp_get_current_user();
+    58				$cid  = (int) $request->get_param( 'competicion_id' );
+    59				$ok   = str_matches_user_can( $user, 'write', $cid );
+    60				if ( ! $ok ) {
+    61					return new WP_Error( 'forbidden', 'No autorizado para crear partidos', array( 'status' => 403 ) );
+    62				}
+    63				return true;
+    64			},
+    65			'callback'            => function( WP_REST_Request $request ) {
+    66				$body = $request->get_json_params();
+    67				str_matches_log( 'API', array( 'op' => 'POST /matches', 'body' => $body ) );
+    68	
+    69				$val = str_matches_validate_payload( $body, 'create' );
+    70				if ( ! $val['ok'] ) {
+    71					return new WP_Error( $val['error']['code'], $val['error']['message'], array( 'status' => $val['error']['status'] ) );
+    72				}
+    73	
+    74				// Skeleton: no insertamos aún; devolvemos mock normalizado.
+    75				$mock = str_matches_normalize_match( rand( 1000, 9999 ), $body );
+    76				return new WP_REST_Response( $mock, 201 );
+    77			},
+    78		) );
+    79	
+    80		/**
+    81		 * PATCH /matches/{id}
+    82		 */
+    83		register_rest_route( $ns, '/matches/(?P<id>\d+)', array(
+    84			'methods'             => WP_REST_Server::EDITABLE,
+    85			'permission_callback' => function( $request ) {
+    86				$user = wp_get_current_user();
+    87				// En skeleton no resolvemos el match real; tomamos competicion_id si viene en body para permisos.
+    88				$body = $request->get_json_params();
+    89				$cid  = (int) ( $body['competicion_id'] ?? 0 );
+    90				$ok   = str_matches_user_can( $user, 'write', $cid );
+    91				if ( ! $ok ) {
+    92					return new WP_Error( 'forbidden', 'No autorizado para editar partidos', array( 'status' => 403 ) );
+    93				}
+    94				return true;
+    95			},
+    96			'callback'            => function( WP_REST_Request $request ) {
+    97				$id   = (int) $request['id'];
+    98				$body = $request->get_json_params();
+    99				str_matches_log( 'API', array( 'op' => 'PATCH /matches/{id}', 'id' => $id, 'body' => $body ) );
+   100	
+   101				// Skeleton: validación superficial
+   102				$mock = str_matches_normalize_match( $id, $body );
+   103				return rest_ensure_response( $mock );
+   104			},
+   105		) );
+   106	
+   107		/**
+   108		 * PATCH /matches/{id}/result
+   109		 */
+   110		register_rest_route( $ns, '/matches/(?P<id>\d+)/result', array(
+   111			'methods'             => WP_REST_Server::EDITABLE,
+   112			'permission_callback' => function( $request ) {
+   113				$user = wp_get_current_user();
+   114				$body = $request->get_json_params();
+   115				$cid  = (int) ( $body['competicion_id'] ?? 0 );
+   116				$ok   = str_matches_user_can( $user, 'write', $cid ); // en FASE C afinaremos (jugadores implicados)
+   117				if ( ! $ok ) {
+   118					return new WP_Error( 'forbidden', 'No autorizado para reportar resultados', array( 'status' => 403 ) );
+   119				}
+   120				return true;
+   121			},
+   122			'callback'            => function( WP_REST_Request $request ) {
+   123				$id   = (int) $request['id'];
+   124				$body = $request->get_json_params();
+   125				str_matches_log( 'API', array( 'op' => 'PATCH /matches/{id}/result', 'id' => $id, 'body' => $body ) );
+   126	
+   127				// Skeleton: marcamos estado mock “pendiente_confirmacion”.
+   128				$body['estado']               = 'pendiente_confirmacion';
+   129				$body['resultado_confirmado'] = false;
+   130	
+   131				$mock = str_matches_normalize_match( $id, $body );
+   132				return rest_ensure_response( $mock );
+   133			},
+   134		) );
+   135	
+   136		/**
+   137		 * POST /matches/{id}/confirm
+   138		 */
+   139		register_rest_route( $ns, '/matches/(?P<id>\d+)/confirm', array(
+   140			'methods'             => WP_REST_Server::CREATABLE,
+   141			'permission_callback' => function( $request ) {
+   142				$user = wp_get_current_user();
+   143				$cid  = (int) $request->get_param( 'competicion_id' ); // puede llegar por query o body
+   144				if ( ! $cid ) {
+   145					$body = $request->get_json_params();
+   146					$cid  = (int) ( $body['competicion_id'] ?? 0 );
+   147				}
+   148				$ok = str_matches_user_can( $user, 'write', $cid ); // en FASE C afinaremos (oponente/organizador/admin)
+   149				if ( ! $ok ) {
+   150					return new WP_Error( 'forbidden', 'No autorizado para confirmar resultados', array( 'status' => 403 ) );
+   151				}
+   152				return true;
+   153			},
+   154			'callback'            => function( WP_REST_Request $request ) {
+   155				$id     = (int) $request['id'];
+   156				$params = $request->get_params();
+   157				str_matches_log( 'API', array( 'op' => 'POST /matches/{id}/confirm', 'id' => $id, 'params' => $params ) );
+   158	
+   159				// Skeleton: devolvemos estado confirmado y flag de recálculo de standings.
+   160				$mock = str_matches_normalize_match( $id, array(
+   161					'estado'               => 'confirmado',
+   162					'resultado_confirmado' => true,
+   163				) );
+   164	
+   165				$mock['_side_effects'] = array(
+   166					'standings' => 'recalculate_requested',
+   167				);
+   168	
+   169				return rest_ensure_response( $mock );
+   170			},
+   171		) );
+   172	
+   173		/**
+   174		 * DELETE /matches/{id}
+   175		 */
+   176		register_rest_route( $ns, '/matches/(?P<id>\d+)', array(
+   177			'methods'             => WP_REST_Server::DELETABLE,
+   178			'permission_callback' => function( $request ) {
+   179				$user = wp_get_current_user();
+   180				$cid  = (int) $request->get_param( 'competicion_id' );
+   181				$ok   = str_matches_user_can( $user, 'write', $cid );
+   182				if ( ! $ok ) {
+   183					return new WP_Error( 'forbidden', 'No autorizado para eliminar partidos', array( 'status' => 403 ) );
+   184				}
+   185				return true;
+   186			},
+   187			'callback'            => function( WP_REST_Request $request ) {
+   188				$id     = (int) $request['id'];
+   189				$params = $request->get_params();
+   190				str_matches_log( 'API', array( 'op' => 'DELETE /matches/{id}', 'id' => $id, 'params' => $params ) );
+   191	
+   192				// Skeleton: no eliminamos aún; reportamos resultado mock.
+   193				return rest_ensure_response( array(
+   194					'deleted'        => false,
+   195					'id'             => $id,
+   196					'note'           => 'Skeleton: eliminación sin efectos (FASE B/C implementará persistencia).',
+   197					'_side_effects'  => array( 'standings' => 'invalidate_if_confirmed' ),
+   198				) );
+   199			},
+   200		) );
+   201	
+   202	} );

@@ -22,9 +22,9 @@
     22	    21	  ".git/logs/HEAD": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/logs/HEAD",
     23	    22	  ".git/logs/refs/heads/main": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/logs/refs/heads/main",
     24	    23	  ".git/logs/refs/remotes/origin/HEAD": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/logs/refs/remotes/origin/HEAD",
-    25	    24	  ".git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.idx": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.idx",
-    26	    25	  ".git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.pack": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.pack",
-    27	    26	  ".git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.rev": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-2452bfc25997395c49874bdbfeec23e2e1b5f78b.rev",
+    25	    24	  ".git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.idx": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.idx",
+    26	    25	  ".git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.pack": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.pack",
+    27	    26	  ".git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.rev": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/objects/pack/pack-470d1bf7d18b909405c2e710c2b60ab4d9ea1397.rev",
     28	    27	  ".git/packed-refs": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/packed-refs",
     29	    28	  ".git/refs/heads/main": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/refs/heads/main",
     30	    29	  ".git/refs/remotes/origin/HEAD": "https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/.git/refs/remotes/origin/HEAD"

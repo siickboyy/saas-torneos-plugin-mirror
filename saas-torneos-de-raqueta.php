@@ -139,6 +139,10 @@ require_once STR_PLUGIN_PATH . 'includes/admin-columns/columns-competicion.php';
 require_once STR_PLUGIN_PATH . 'includes/admin-columns/columns-jugadores.php';
 require_once STR_PLUGIN_PATH . 'includes/features/groups/ajax/manage.php';
 
+// Matches (sistema de partidos) – Skeleton FASE A.2
+require_once plugin_dir_path( __FILE__ ) . 'includes/features/matches/model.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/features/matches/rest.php';
+
 // ======================================================
 // AUTOLOAD de AJAX por módulos “features” (sin logs)
 // ======================================================
