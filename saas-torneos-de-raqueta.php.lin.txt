@@ -609,5 +609,5 @@
    609	}, 20);
    610	
    611	if (!defined('ABSPATH')) { exit; }
-   612	define('STR_PLUGIN_VERSION', '0.1.1'); // súbelo un número
+   612	define('STR_PLUGIN_VERSION', '0.1.2'); // súbelo un número
    613	add_shortcode('str_version', fn() => 'SaaS Torneos versión: ' . esc_html(STR_PLUGIN_VERSION));
