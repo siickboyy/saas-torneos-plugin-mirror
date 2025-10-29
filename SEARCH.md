@@ -1,8 +1,9 @@
-# Cómo buscar en todo el plugin
-- Abre el RAW de `FULLCODE.txt`:
-  https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/FULLCODE.txt
-- Busca el texto que quieras (Ctrl+F). Encima verás cabeceras tipo:
-      ===== BEGIN includes/features/groups_v2/bootstrap.php =====
-  y cada línea numerada (ej. `123  function ...`).
-- Para abrir el archivo exacto, usa el RAW desde FILEMAP.json:
+# Búsqueda en el mirror (con archivos gigantes)
+- Índice de FULLCODE: 
+  https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/FULLCODE.index.json
+- Mapa archivo → RAW: 
   https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/FILEMAP.json
+- Índice de archivos gigantes (ruta → índice LIN):
+  https://raw.githubusercontent.com/siickboyy/saas-torneos-plugin-mirror/main/LINMAP.json
+- Copia numerada por archivo (si no es gigante): añade `.lin.txt` al final de la ruta.
+- Si un archivo es gigante: consulta `<ruta>.lin.index.json` para ver sus partes `*.linsplit-XX.txt`.
